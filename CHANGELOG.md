@@ -5,6 +5,13 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-11-22
+
+### Fixed
+
+- Markdown output no longer writes `&emsp;` entities into body text, which appeared literally in the live editor.
+- Markdown 2em indentation now uses frontmatter `cssclasses: book-format-sync` and plugin CSS in reading view.
+
 ## [1.3.0] - 2026-11-22
 
 ### Added

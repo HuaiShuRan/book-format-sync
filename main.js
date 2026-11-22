@@ -13,7 +13,6 @@ const {
   splitParagraphs,
   splitPreamble,
   indentParagraphs,
-  MD_INDENT,
   TXT_INDENT,
   decodeEntities,
 } = __require("lib/text.js");
@@ -29,6 +28,7 @@ const { readZip } = __require("lib/zip.js");
 const { toBuffer } = __require("lib/text.js");
 
 const FORMATS = ['md', 'txt', 'epub'];
+const MD_CSS_CLASS = 'book-format-sync';
 const MIME = {
   md: 'text/markdown',
   txt: 'text/plain',
@@ -61,10 +61,55 @@ function updateFrontmatterLinks(raw, bookName) {
   return result.endsWith('\n') ? result : `${result}\n`;
 }
 
+function ensureCssClass(raw) {
+  if (!raw) return `---\ncssclasses: ${MD_CSS_CLASS}\n---\n`;
+  const lines = String(raw).replace(/\r\n?/g, '\n').split('\n');
+  let close = -1;
+  for (let index = 1; index < lines.length; index += 1) {
+    if (lines[index].trim() === '---') {
+      close = index;
+      break;
+    }
+  }
+  if (close < 0) return `---\ncssclasses: ${MD_CSS_CLASS}\n---\n`;
+
+  let cssIndex = -1;
+  for (let index = 1; index < close; index += 1) {
+    if (/^cssclasses\s*:/i.test(lines[index])) {
+      cssIndex = index;
+      break;
+    }
+  }
+  if (cssIndex < 0) {
+    lines.splice(close, 0, `cssclasses: ${MD_CSS_CLASS}`);
+    return `${lines.join('\n').replace(/\n*$/, '')}\n`;
+  }
+
+  const value = lines[cssIndex].replace(/^[^:]*:/, '').trim();
+  if (!value) {
+    // YAML block list. Add the class only if it is not already present.
+    let cursor = cssIndex + 1;
+    let present = false;
+    while (cursor < close && /^[ \t]+-/.test(lines[cursor])) {
+      if (lines[cursor].replace(/^[ \t]+-\s*/, '').trim() === MD_CSS_CLASS) present = true;
+      cursor += 1;
+    }
+    if (!present) lines.splice(cssIndex + 1, 0, `  - ${MD_CSS_CLASS}`);
+  } else if (value.startsWith('[') && value.endsWith(']')) {
+    if (!value.includes(MD_CSS_CLASS)) {
+      lines[cssIndex] = `cssclasses: [${value.slice(1, -1).trim()}${value.slice(1, -1).trim() ? ', ' : ''}${MD_CSS_CLASS}]`;
+    }
+  } else if (!value.split(/[\s,]+/).includes(MD_CSS_CLASS)) {
+    lines[cssIndex] = `cssclasses: ${value} ${MD_CSS_CLASS}`;
+  }
+  return `${lines.join('\n').replace(/\n*$/, '')}\n`;
+}
+
 function buildFrontmatter(book, bookName) {
-  if (book.frontmatterRaw) return updateFrontmatterLinks(book.frontmatterRaw, bookName);
-  if (!book.author) return '';
-  return `---\n作者: ${yamlValue(book.author)}\n---\n`;
+  let raw = '';
+  if (book.frontmatterRaw) raw = updateFrontmatterLinks(book.frontmatterRaw, bookName);
+  else if (book.author) raw = `---\n作者: ${yamlValue(book.author)}\n---\n`;
+  return ensureCssClass(raw);
 }
 
 function normalizeChapters(chapters, rules, warnings) {
@@ -180,12 +225,19 @@ function parseBook(input) {
   };
 }
 
+function protectMarkdownHeadings(text) {
+  return String(text || '').replace(
+    /^([ \t]{0,3})(#{1,6})(?=[ \t]|$)/gm,
+    (whole, indent, hashes) => `${indent}${'&#35;'.repeat(hashes.length)}`,
+  );
+}
+
 function renderMarkdownPreamble(preamble) {
   const { headingRaw, rest } = splitPreamble(preamble);
-  const paragraphs = splitParagraphs(rest);
+  const paragraphs = splitParagraphs(rest).map(protectMarkdownHeadings);
   const parts = [];
   if (headingRaw) parts.push(headingRaw);
-  if (paragraphs.length) parts.push(indentParagraphs(paragraphs, MD_INDENT));
+  if (paragraphs.length) parts.push(paragraphs.join('\n\n'));
   return parts.join('\n\n');
 }
 
@@ -220,8 +272,8 @@ function serializeMarkdown(book, options) {
 
   for (const chapter of book.chapters) {
     const title = String(chapter.normalizedTitle || chapter.title || '').trim();
-    const paragraphs = chapterMarkdownParagraphs(chapter);
-    const body = indentParagraphs(paragraphs, MD_INDENT);
+    const paragraphs = chapterMarkdownParagraphs(chapter).map(protectMarkdownHeadings);
+    const body = paragraphs.join('\n\n');
     blocks.push(`## ${title}${body ? `\n\n${body}` : ''}`);
   }
   return `${blocks.join('\n\n').trimEnd()}\n`;
@@ -264,15 +316,15 @@ function hasLeadingIndent(value) {
 function verifyTextParagraphs(blocks, prefix, format, chapterIndex) {
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index];
-    if (!block.startsWith(prefix)) {
+    if (prefix && !block.startsWith(prefix)) {
       throw new Error(`三格式校验失败：${format} 第 ${chapterIndex + 1} 章第 ${index + 1} 段缺少 2em 首行缩进。`);
     }
-    const rest = block.slice(prefix.length);
+    const rest = prefix ? block.slice(prefix.length) : block;
     if (!rest.replace(/[\s\u3000\u2000-\u200a]/g, '')) {
       throw new Error(`三格式校验失败：${format} 第 ${chapterIndex + 1} 章第 ${index + 1} 段为空。`);
     }
     if (hasLeadingIndent(rest)) {
-      throw new Error(`三格式校验失败：${format} 第 ${chapterIndex + 1} 章第 ${index + 1} 段缩进叠加或多余。`);
+      throw new Error(`三格式校验失败：${format} 第 ${chapterIndex + 1} 章第 ${index + 1} 段存在字面缩进，应只由样式控制。`);
     }
   }
 }
@@ -308,7 +360,7 @@ function verifyMdPreambleIndent(parsedPreamble, book) {
   if (blocks.length !== expected.length) {
     throw new Error(`三格式校验失败：md 前言有 ${blocks.length} 段，预期 ${expected.length} 段。`);
   }
-  verifyTextParagraphs(blocks, MD_INDENT, 'md-前言', -1);
+  verifyTextParagraphs(blocks, null, 'md-前言', -1);
 }
 
 function verifyEpubIndent(buffer, book) {
@@ -417,7 +469,11 @@ function verifyRendered(book, rendered, rules) {
     }
   }
 
-  verifyParsedTextIndent(mdParsed.chapters, MD_INDENT, 'md', book);
+  if (!String(mdParsed.frontmatterRaw || '').includes(MD_CSS_CLASS)) {
+    throw new Error(`三格式校验失败：md 缺少 frontmatter cssclasses: ${MD_CSS_CLASS}，阅读视图无法应用 2em 缩进。`);
+  }
+
+  verifyParsedTextIndent(mdParsed.chapters, null, 'md', book);
   verifyParsedTextIndent(txtParsed.chapters, TXT_INDENT, 'txt', book);
   verifyMarkdownHeadingLines(mdText, book);
   verifyTxtHeadingLines(txtText, book);
@@ -428,7 +484,7 @@ function verifyRendered(book, rendered, rules) {
   return {
     ...actual,
     indentation: {
-      md: '2em（两个 &emsp; 实体）',
+      md: '2em（frontmatter cssclasses: book-format-sync + 插件 CSS）',
       txt: '2 个全角空格',
       epub: 'CSS text-indent: 2em',
     },
@@ -462,6 +518,7 @@ function renderBook(book, options) {
 module.exports = {
   FORMATS,
   MIME,
+  MD_CSS_CLASS,
   extensionOf,
   baseNameOf,
   parseBook,
@@ -1425,9 +1482,7 @@ const NAMED_ENTITIES = {
   times: '×', divide: '÷', laquo: '«', raquo: '»', szlig: 'ß',
 };
 
-// Markdown 里直接写全角空格会被 CommonMark 当行首空白裁掉；
-// 用两个 emsp 实体表达 2em，渲染宽度与两个全角空格一致，且不会与源缩进叠加。
-const MD_INDENT = '&emsp;&emsp;';
+// TXT 的纯文本缩进；Markdown 改由 frontmatter cssclasses + 插件 CSS 控制 2em。
 const TXT_INDENT = '\u3000\u3000';
 
 const LEADING_INDENT_RE = /^(?:(?:&(?:emsp|ensp|nbsp|thinsp);)|&#(?:8194|8195|160|12288|x2002|x2003|x00a0);|[\t \u00a0\u1680\u2000-\u200a\u202f\u205f\u3000])+/i;
@@ -1635,7 +1690,6 @@ function formatBytes(size) {
 }
 
 module.exports = {
-  MD_INDENT,
   TXT_INDENT,
   toBuffer,
   decodeTextBuffer,

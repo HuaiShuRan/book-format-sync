@@ -12,7 +12,7 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
 
 - **Chapter heading normalization**: `第1章` / `第十章` / `第１２章` → `第001章 …`; numbers are padded to 3 digits.
 - **Consistent paragraph indentation**:
-  - Markdown: two `&emsp;` entities (2em)
+  - Markdown: frontmatter `cssclasses: book-format-sync` + plugin CSS `text-indent: 2em`; no `&emsp;` entities in the source, so the editor stays clean.
   - TXT: two full-width spaces
   - EPUB: `text-indent: 2em`
 - **Three-format conversion**: from `md`, `txt`, or `epub`, generate the other formats without modifying the source file.
@@ -161,6 +161,7 @@ book-format-sync/
 - Images in EPUB become `[图片]` placeholders in text formats.
 - Chapter number gaps/duplicates are reported, not renumbered.
 - Title suggestions are local and extractive; they may be plain or truncated, and should be reviewed before applying.
+- Markdown 2em indentation depends on the plugin's CSS being loaded; the source itself remains plain text without indentation entities.
 
 ## License
 

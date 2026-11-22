@@ -307,8 +307,11 @@ test('三格式首行缩进统一且不叠加', () => {
   const txt = rendered.txt.toString('utf8');
   assert.ok(md.includes('## 第001章 真正的开始。'));
   assert.ok(!/^[ \t\u3000]+## 第001章/m.test(md));
-  assert.ok(md.includes('&emsp;&emsp;第一段。'));
-  assert.ok(!md.includes('&emsp;&emsp;&emsp;'));
+  assert.ok(md.includes('cssclasses: book-format-sync'));
+  assert.ok(md.includes('\n第一段。'));
+  assert.ok(!md.includes('&emsp;'));
+  const pluginCss = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+  assert.ok(pluginCss.includes('.book-format-sync p'));
   assert.ok(!md.includes('\n　　'));
   assert.ok(txt.includes('\n第001章 真正的开始。\n'));
   assert.ok(txt.includes('\n　　第一段。'));
@@ -330,7 +333,7 @@ test('从 TXT 生成另外两种，源文件哈希不变', () => {
     '第002章 全角编号。',
     '第010章 中文数字。',
   ]);
-  assert.ok(out.md.toString('utf8').includes('&emsp;&emsp;## 第9章'));
+  assert.ok(out.md.toString('utf8').includes('&#35;&#35; 第9章'));
   const after = fs.readFileSync(sourceTxt);
   assert.strictEqual(hash(before), hash(after));
 });
