@@ -15,6 +15,14 @@ const {
   buildTitleSuggestions,
   titleLength,
 } = require('../lib/titles');
+const {
+  normalizeVaultRelativePath,
+  defaultBookDir,
+  migrateSettings,
+  findBookProfile,
+  validateProfilePaths,
+  outputDirsForProfile,
+} = require('../lib/paths');
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bfs-test-'));
 let passed = 0;
@@ -262,6 +270,42 @@ test('标题缓存命中时复用', () => {
     cache,
   });
   assert.ok(second.suggestions.find((item) => item.index === 0).reused);
+});
+
+console.log('路径配置');
+test('vault 相对路径校验与规范化', () => {
+  assert.strictEqual(normalizeVaultRelativePath('10 书籍\\某书'), '10 书籍/某书');
+  assert.strictEqual(normalizeVaultRelativePath('a/./b'), 'a/b');
+  assert.throws(() => normalizeVaultRelativePath('../outside'), /不能包含/);
+  assert.throws(() => normalizeVaultRelativePath('a/../../b'), /不能包含/);
+  assert.throws(() => normalizeVaultRelativePath('/absolute/path'), /绝对路径/);
+  assert.throws(() => normalizeVaultRelativePath('C:\\outside'), /绝对路径/);
+});
+
+test('输出目录留空回退默认目录', () => {
+  const dirs = outputDirsForProfile(
+    { bookName: '某书', mdDir: '自定义/md', txtDir: '', epubDir: '' },
+    '10 书籍',
+    '某书',
+  );
+  assert.strictEqual(dirs.md, '自定义/md');
+  assert.strictEqual(dirs.txt, defaultBookDir('10 书籍', '某书'));
+  assert.strictEqual(dirs.epub, defaultBookDir('10 书籍', '某书'));
+});
+
+test('旧设置迁移与书籍条目查找', () => {
+  const settings = migrateSettings({ bookRoot: '10 书籍' });
+  assert.strictEqual(settings.settingsVersion, 2);
+  assert.deepStrictEqual(settings.bookProfiles, []);
+  const profiles = [{ id: 'a', bookName: '某书', originalPath: '00 收件箱/某书.txt' }];
+  assert.strictEqual(findBookProfile(profiles, { bookName: '某书' }).id, 'a');
+  assert.strictEqual(findBookProfile(profiles, { sourcePath: '00 收件箱/某书.txt' }).id, 'a');
+});
+
+test('空路径校验通过且非法配置报错', () => {
+  const normalized = validateProfilePaths({ bookName: '某书', originalPath: '', mdDir: '', txtDir: '', epubDir: '' });
+  assert.strictEqual(normalized.bookName, '某书');
+  assert.throws(() => validateProfilePaths({ bookName: '某书', mdDir: '../x' }), /不能包含/);
 });
 
 console.log('三格式生成与互转');

@@ -22,6 +22,17 @@ const {
   TITLE_ALGORITHM_VERSION,
 } = require('../lib/titles');
 const { formatBytes, sanitizeFileName } = require('../lib/text');
+const {
+  PathConfigError,
+  normalizeVaultRelativePath,
+  defaultBookDir,
+  resolveOutputDir,
+  normalizeBookProfile,
+  migrateSettings,
+  findBookProfile,
+  validateProfilePaths,
+  outputDirsForProfile,
+} = require('../lib/paths');
 
 const DEFAULT_SETTINGS = Object.freeze({
   bookRoot: '10 书籍',
@@ -35,6 +46,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   txtLineEnding: 'lf',
   txtBom: false,
   maxTitleChars: 10,
+  bookProfiles: [],
+  settingsVersion: 2,
 });
 
 function posixDirname(value) {
@@ -164,7 +177,7 @@ class BookFormatSyncPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings = migrateSettings(Object.assign({}, DEFAULT_SETTINGS, await this.loadData()));
   }
 
   async saveSettings() {
@@ -251,6 +264,74 @@ class BookFormatSyncPlugin extends Plugin {
     return { path: filePath, ext, size };
   }
 
+  defaultOutputDirForBook(bookName) {
+    const dir = this.settings.folderPerBook
+      ? defaultBookDir(this.rootPath, bookName)
+      : normalizeVaultRelativePath(this.rootPath, '默认输出目录');
+    return dir;
+  }
+
+  profileFor(bookName, sourcePath) {
+    return findBookProfile(this.settings.bookProfiles || [], { bookName, sourcePath });
+  }
+
+  outputDirsForBook(bookName, sourcePath) {
+    const profile = this.profileFor(bookName, sourcePath);
+    const fallback = this.defaultOutputDirForBook(bookName);
+    if (!profile) {
+      return { profile: null, md: fallback, txt: fallback, epub: fallback, defaultDir: fallback };
+    }
+    const entry = validateProfilePaths(profile);
+    const dirs = outputDirsForProfile(entry, this.rootPath, bookName, fallback);
+    return { profile: entry, ...dirs, defaultDir: fallback };
+  }
+
+  async resolveOriginalPath(profile, bookName, preferredPath) {
+    const configured = profile && profile.originalPath
+      ? normalizeVaultRelativePath(profile.originalPath, '原件路径')
+      : '';
+    if (configured) {
+      if (!(await this.exists(configured))) {
+        throw new PathConfigError(`原件路径不存在：${configured}`);
+      }
+      const stat = await this.adapter.stat(configured);
+      if (stat && stat.type === 'folder') {
+        for (const ext of ['md', 'txt', 'epub']) {
+          const candidate = posixJoin(configured, `${bookName}.${ext}`);
+          if (await this.exists(candidate)) return candidate;
+        }
+        throw new PathConfigError(`原件目录中没有《${bookName}》的 md/txt/epub：${configured}`);
+      }
+      if (!extOf(configured)) {
+        throw new PathConfigError(`原件路径必须是 md/txt/epub 文件：${configured}`);
+      }
+      return configured;
+    }
+    if (preferredPath && extOf(preferredPath) && await this.exists(preferredPath)) {
+      return preferredPath;
+    }
+    const fallback = this.defaultOutputDirForBook(bookName);
+    for (const dir of [fallback, this.rootPath]) {
+      for (const ext of ['md', 'txt', 'epub']) {
+        const candidate = posixJoin(dir, `${bookName}.${ext}`);
+        if (await this.exists(candidate)) return candidate;
+      }
+    }
+    throw new PathConfigError(`未找到《${bookName}》的原件；请配置“原件路径”，或把文件放到 ${fallback}/。`);
+  }
+
+  async validateProfileEntry(entry) {
+    const normalized = validateProfilePaths(entry);
+    const duplicate = (this.settings.bookProfiles || []).find(
+      (item) => item.id !== normalized.id && item.bookName === normalized.bookName,
+    );
+    if (duplicate) throw new PathConfigError(`书籍标识重复：${normalized.bookName}`);
+    if (normalized.originalPath && !(await this.exists(normalized.originalPath))) {
+      throw new PathConfigError(`原件路径不存在：${normalized.originalPath}`);
+    }
+    return normalized;
+  }
+
   async destinationFor(filePath) {
     const root = this.rootPath;
     const ext = extOf(filePath);
@@ -258,38 +339,42 @@ class BookFormatSyncPlugin extends Plugin {
     const parent = posixDirname(filePath);
     const stem = stemOf(filePath);
     let bookName = stem;
-    let destDir;
+    let defaultDir;
     let inFolderGroup = false;
 
     if (this.settings.folderPerBook) {
       if (parent === root) {
-        destDir = posixJoin(root, stem);
+        defaultDir = posixJoin(root, stem);
       } else if (parent.startsWith(`${root}/`)) {
         const relative = parent.slice(root.length + 1);
         const first = relative.split('/')[0];
         if (parent === posixJoin(root, first)) {
           bookName = first;
-          destDir = posixJoin(root, bookName);
+          defaultDir = posixJoin(root, bookName);
           inFolderGroup = true;
         } else {
-          destDir = posixJoin(root, stem);
+          defaultDir = posixJoin(root, stem);
         }
       } else {
-        destDir = posixJoin(root, stem);
+        defaultDir = posixJoin(root, stem);
       }
     } else {
-      destDir = root;
+      defaultDir = root;
     }
 
+    const profile = this.profileFor(bookName, filePath);
+    if (profile) bookName = profile.bookName;
+    const outputs = this.outputDirsForBook(bookName, filePath);
     return {
       bookName,
-      destDir,
+      destDir: defaultDir,
+      outputDirs: outputs,
       sourcePath: filePath,
       ext,
       inFolderGroup,
       targets: Object.fromEntries(FORMATS.map((format) => [
         format,
-        posixJoin(destDir, `${bookName}.${format}`),
+        posixJoin(outputs[format], `${bookName}.${format}`),
       ])),
     };
   }
@@ -318,6 +403,19 @@ class BookFormatSyncPlugin extends Plugin {
 
   async groupForFile(filePath) {
     const dest = await this.destinationFor(filePath);
+    const files = {};
+    for (const ext of FORMATS) {
+      files[ext] = await this.fileInfo(dest.targets[ext], ext);
+    }
+    if (Object.values(files).some(Boolean)) {
+      return {
+        name: dest.bookName,
+        dir: dest.outputDirs.md,
+        files,
+        legacy: {},
+        hasFolder: true,
+      };
+    }
     return this.groupForName(dest.bookName);
   }
 
@@ -344,15 +442,23 @@ class BookFormatSyncPlugin extends Plugin {
     return { book, data, format };
   }
 
-  async materialize(book, destDir, options) {
+  async materialize(book, destinations, options) {
     const opts = options || {};
+    const dirs = typeof destinations === 'string'
+      ? { md: destinations, txt: destinations, epub: destinations }
+      : destinations;
+    if (!dirs || !dirs.md || !dirs.txt || !dirs.epub) {
+      throw new PathConfigError('输出目录配置不完整，无法生成三格式。');
+    }
     const rendered = renderBook(book, this.renderOptions(book.bookName));
     const backupRoot = posixJoin('.book-format-sync', 'backups', timestamp());
     const results = [];
     const backedUp = new Set();
 
     for (const ext of FORMATS) {
-      const target = posixJoin(destDir, `${book.bookName}.${ext}`);
+      const outputDir = normalizeVaultRelativePath(dirs[ext], `${ext} 输出目录`);
+      await this.ensureFolder(outputDir);
+      const target = posixJoin(outputDir, `${book.bookName}.${ext}`);
       const sourceIsTarget = opts.sourcePath && opts.sourcePath === target;
       if (sourceIsTarget && opts.skipSourceFormat) {
         results.push({ ext, target, status: 'source-kept' });
@@ -371,7 +477,7 @@ class BookFormatSyncPlugin extends Plugin {
       results.push({ ext, target, status: existed ? 'overwritten' : 'created' });
     }
 
-    return { rendered, results, destDir };
+    return { rendered, results, destDir: dirs.md, destinations: dirs };
   }
 
   async normalizeActiveBook(targetFile) {
@@ -380,24 +486,41 @@ class BookFormatSyncPlugin extends Plugin {
       new Notice('请先打开或右键选择一本 txt、md 或 epub 书籍。');
       return;
     }
-    let group = await this.groupForFile(file.path);
-    if (!group) {
-      // 文件不在书库内（例如收件箱里的 txt）：按书名在书库根目录建立目标组。
-      const dest = await this.destinationFor(file.path);
-      group = {
-        name: dest.bookName,
-        dir: dest.destDir,
-        files: { [dest.ext]: { path: file.path, ext: dest.ext, size: 0 } },
-        legacy: {},
-        hasFolder: false,
-      };
+    let group;
+    let dest;
+    try {
+      group = await this.groupForFile(file.path);
+      if (!group) {
+        // 文件不在书库内（例如收件箱里的 txt）：按书名建立临时组。
+        dest = await this.destinationFor(file.path);
+        group = {
+          name: dest.bookName,
+          dir: dest.outputDirs.md,
+          files: { [dest.ext]: { path: file.path, ext: dest.ext, size: 0 } },
+          legacy: {},
+          hasFolder: false,
+        };
+      }
+    } catch (error) {
+      new Notice(`路径配置错误：${error.message}`, 9000);
+      return;
     }
-    const sourcePath = this.pickSource(group, file.path);
+    let sourcePath;
     let parsed;
     try {
+      const preferred = this.pickSource(group, file.path);
+      const profile = this.profileFor(group.name, preferred);
+      sourcePath = await this.resolveOriginalPath(profile, group.name, preferred);
       parsed = await this.parseSource(sourcePath);
     } catch (error) {
-      new Notice(`解析失败：${error.message}`, 8000);
+      new Notice(`读取失败：${error.message}`, 9000);
+      return;
+    }
+    let outputs;
+    try {
+      outputs = this.outputDirsForBook(parsed.book.bookName, sourcePath);
+    } catch (error) {
+      new Notice(`路径配置错误：${error.message}`, 9000);
       return;
     }
     const warnings = parsed.book.warnings;
@@ -407,7 +530,9 @@ class BookFormatSyncPlugin extends Plugin {
         `书籍：${parsed.book.bookName}`,
         `源文件：${sourcePath}`,
         `章节：${parsed.book.stats.chapterCount} 章，${parsed.book.stats.chars.toLocaleString()} 字`,
-        `目标目录：${group.dir}`,
+        `md 输出：${outputs.md}`,
+        `txt 输出：${outputs.txt}`,
+        `epub 输出：${outputs.epub}`,
         `章节规范：${this.rules.prefix}${'0'.repeat(Math.max(0, this.rules.numberPad - 1))}1${this.rules.suffix}${this.rules.separator}标题`,
         warnings.length ? `注意：有 ${warnings.length} 条警告，将在完成后列出。` : '未发现章节号异常。',
         '',
@@ -416,7 +541,7 @@ class BookFormatSyncPlugin extends Plugin {
     );
     if (!ok) return;
     try {
-      const result = await this.materialize(parsed.book, group.dir, {
+      const result = await this.materialize(parsed.book, outputs, {
         sourcePath,
         overwrite: true,
         skipSourceFormat: false,
@@ -433,7 +558,13 @@ class BookFormatSyncPlugin extends Plugin {
       new Notice('请先打开或右键选择一个 txt、md 或 epub 文件。');
       return;
     }
-    const dest = await this.destinationFor(file.path);
+    let dest;
+    try {
+      dest = await this.destinationFor(file.path);
+    } catch (error) {
+      new Notice(`路径配置错误：${error.message}`, 9000);
+      return;
+    }
     const sourceIsTarget = Object.values(dest.targets).includes(file.path);
     let parsed;
     try {
@@ -450,20 +581,22 @@ class BookFormatSyncPlugin extends Plugin {
       `源文件：${file.path}`,
       `书籍名：${parsed.book.bookName}`,
       `章节：${parsed.book.stats.chapterCount} 章`,
-      `目标目录：${dest.destDir}`,
+      `md 输出：${dest.outputDirs.md}`,
+      `txt 输出：${dest.outputDirs.txt}`,
+      `epub 输出：${dest.outputDirs.epub}`,
     ];
     if (sourceIsTarget) {
       lines.push('源文件本身就在目标位置：为保持原文件不变，只生成另外两种格式，不覆盖源文件。');
       lines.push('如果源文件章节名还不规范，请再执行“规范化并生成当前书籍三格式”（该命令会先备份）。');
     } else {
-      lines.push('源文件不在目标位置：会复制一份规范化后的同格式文件到书库，原文件保持不变。');
+      lines.push('源文件不在目标位置：会复制一份规范化后的同格式文件到配置的输出目录，原文件保持不变。');
     }
     if (existing.length) lines.push(`已存在：${existing.join('、')}；确认后按设置覆盖（默认先备份）。`);
     if (!(await this.askConfirm('从当前文件生成三格式', lines))) return;
 
     const beforeHash = sha256(parsed.data);
     try {
-      const result = await this.materialize(parsed.book, dest.destDir, {
+      const result = await this.materialize(parsed.book, dest.outputDirs, {
         sourcePath: file.path,
         overwrite: this.settings.overwrite !== false,
         skipSourceFormat: sourceIsTarget,
@@ -530,16 +663,22 @@ class BookFormatSyncPlugin extends Plugin {
       new Notice('请先打开或右键选择一本 txt、md 或 epub 书籍。');
       return;
     }
-    let group = await this.groupForFile(file.path);
-    if (!group) {
-      const dest = await this.destinationFor(file.path);
-      group = {
-        name: dest.bookName,
-        dir: dest.destDir,
-        files: { [dest.ext]: { path: file.path, ext: dest.ext, size: 0 } },
-        legacy: {},
-        hasFolder: false,
-      };
+    let group;
+    try {
+      group = await this.groupForFile(file.path);
+      if (!group) {
+        const dest = await this.destinationFor(file.path);
+        group = {
+          name: dest.bookName,
+          dir: dest.outputDirs.md,
+          files: { [dest.ext]: { path: file.path, ext: dest.ext, size: 0 } },
+          legacy: {},
+          hasFolder: false,
+        };
+      }
+    } catch (error) {
+      new Notice(`路径配置错误：${error.message}`, 9000);
+      return;
     }
     const sourcePath = this.pickSource(group, file.path);
     let parsed;
@@ -653,7 +792,8 @@ class BookFormatSyncPlugin extends Plugin {
     }
 
     try {
-      const result = await this.materialize(book, group.dir, {
+      const outputs = this.outputDirsForBook(book.bookName, sourcePath);
+      const result = await this.materialize(book, outputs, {
         sourcePath,
         overwrite: true,
         skipSourceFormat: false,
@@ -772,9 +912,12 @@ class BookFormatSyncPlugin extends Plugin {
       const group = groups[index];
       notice.setMessage(`正在处理 ${index + 1}/${groups.length}：${group.name}`);
       try {
-        const sourcePath = this.pickSource(group);
+        const preferred = this.pickSource(group);
+        const profile = this.profileFor(group.name, preferred);
+        const sourcePath = await this.resolveOriginalPath(profile, group.name, preferred);
         const parsed = await this.parseSource(sourcePath);
-        const result = await this.materialize(parsed.book, group.dir, {
+        const outputs = this.outputDirsForBook(parsed.book.bookName, sourcePath);
+        const result = await this.materialize(parsed.book, outputs, {
           sourcePath,
           overwrite: true,
           skipSourceFormat: false,
@@ -796,7 +939,7 @@ class BookFormatSyncPlugin extends Plugin {
       this.statusBar.setText('三格式 —');
       return;
     }
-    const group = await this.groupForFile(file.path);
+    const group = await this.groupForFile(file.path).catch(() => null);
     if (!group) {
       this.statusBar.setText('三格式 0/3');
       return;
@@ -1191,6 +1334,103 @@ class BookFormatSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
+    containerEl.createEl('h3', { text: '按书路径配置（可选）' });
+    containerEl.createEl('p', {
+      text: '手动添加书籍条目；路径留空时回退到默认目录 10 书籍/<书名>/。路径必须是 vault 内相对路径，输出目录不存在会自动创建。',
+      cls: 'bfs-muted',
+    });
+    const profiles = this.plugin.settings.bookProfiles || [];
+    if (!profiles.length) {
+      containerEl.createEl('p', { text: '尚未配置书籍条目；所有书继续使用默认目录。', cls: 'bfs-muted' });
+    }
+
+    for (const entry of profiles) {
+      const header = new Setting(containerEl)
+        .setName(`书籍：${entry.bookName || '未命名'}`)
+        .setHeading()
+        .addExtraButton((button) => button
+          .setIcon('trash')
+          .setTooltip('删除此书籍路径条目')
+          .onClick(async () => {
+            const ok = await this.plugin.askConfirm('删除书籍路径条目', [
+              `确定删除「${entry.bookName || '未命名'}」的路径配置吗？`,
+              '已生成的书籍文件不会被删除。',
+            ]);
+            if (!ok) return;
+            this.plugin.settings.bookProfiles = profiles.filter((item) => item.id !== entry.id);
+            await this.plugin.saveSettings();
+            this.display();
+          }));
+      header.settingEl.addClass('bfs-profile-header');
+
+      const addPathField = (name, desc, key, placeholder) => {
+        new Setting(containerEl)
+          .setName(name)
+          .setDesc(desc)
+          .addText((text) => {
+            text.setPlaceholder(placeholder)
+              .setValue(entry[key] || '')
+              .onChange(async (value) => {
+                entry[key] = value;
+                await this.plugin.saveSettings();
+              });
+            text.inputEl.addEventListener('blur', async () => {
+              try {
+                await this.plugin.validateProfileEntry(entry);
+              } catch (error) {
+                new Notice(`路径配置错误：${error.message}`, 9000);
+              }
+            });
+          });
+      };
+
+      addPathField('书籍标识', '用于匹配书名和生成文件名，例如：放肆by玄笺。', 'bookName', '放肆by玄笺');
+      addPathField(
+        '原件路径',
+        '原始电子书文件路径，例如：00 收件箱/放肆by玄笺.txt；留空则使用默认书籍目录。',
+        'originalPath',
+        '00 收件箱/放肆by玄笺.txt',
+      );
+      addPathField(
+        'Markdown 输出目录',
+        '留空回退到 10 书籍/<书名>/。',
+        'mdDir',
+        '10 书籍/放肆by玄笺',
+      );
+      addPathField(
+        'TXT 输出目录',
+        '留空回退到 10 书籍/<书名>/。',
+        'txtDir',
+        '90 附件/放肆by玄笺/txt',
+      );
+      addPathField(
+        'EPUB 输出目录',
+        '留空回退到 10 书籍/<书名>/。',
+        'epubDir',
+        '90 附件/放肆by玄笺/epub',
+      );
+    }
+
+    new Setting(containerEl)
+      .setName('添加书籍路径条目')
+      .setDesc('新增一条按书配置；留空的路径继续使用默认目录。')
+      .addButton((button) => button
+        .setButtonText('添加条目')
+        .setCta()
+        .onClick(async () => {
+          const id = `book-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          this.plugin.settings.bookProfiles.push({
+            id,
+            bookName: '新书',
+            originalPath: '',
+            mdDir: '',
+            txtDir: '',
+            epubDir: '',
+          });
+          await this.plugin.saveSettings();
+          this.display();
+        }));
+
     containerEl.createEl('h3', { text: '章节名规范' });
     new Setting(containerEl)
       .setName('前缀')
@@ -1296,16 +1536,22 @@ class BookFormatSettingTab extends PluginSettingTab {
 
 // 供 LibraryModal 调用：按现有格式重新规范化一本书。
 BookFormatSyncPlugin.prototype.normalizeGroup = async function normalizeGroup(group) {
-  const sourcePath = this.pickSource(group);
-  if (!sourcePath) {
-    new Notice('这本书没有可读取的 md/txt/epub 文件。');
-    return;
-  }
+  let sourcePath;
   let parsed;
   try {
+    const preferred = this.pickSource(group);
+    const profile = this.profileFor(group.name, preferred);
+    sourcePath = await this.resolveOriginalPath(profile, group.name, preferred);
     parsed = await this.parseSource(sourcePath);
   } catch (error) {
-    new Notice(`解析失败：${error.message}`, 9000);
+    new Notice(`读取失败：${error.message}`, 9000);
+    return;
+  }
+  let outputs;
+  try {
+    outputs = this.outputDirsForBook(parsed.book.bookName, sourcePath);
+  } catch (error) {
+    new Notice(`路径配置错误：${error.message}`, 9000);
     return;
   }
   const ok = await this.askConfirm(
@@ -1314,13 +1560,15 @@ BookFormatSyncPlugin.prototype.normalizeGroup = async function normalizeGroup(gr
       `书籍：${parsed.book.bookName}`,
       `源文件：${sourcePath}`,
       `章节：${parsed.book.stats.chapterCount} 章`,
-      `目标目录：${group.dir}`,
+      `md 输出：${outputs.md}`,
+      `txt 输出：${outputs.txt}`,
+      `epub 输出：${outputs.epub}`,
       parsed.book.warnings.length ? `警告：${parsed.book.warnings.length} 条` : '未发现章节号异常。',
     ],
   );
   if (!ok) return;
   try {
-    const result = await this.materialize(parsed.book, group.dir, {
+    const result = await this.materialize(parsed.book, outputs, {
       sourcePath,
       overwrite: true,
       skipSourceFormat: false,

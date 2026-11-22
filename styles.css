@@ -21,6 +21,12 @@
   font-size: 0.9em;
 }
 
+.bfs-profile-header {
+  margin-top: 14px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
 .bfs-warn-text {
   color: var(--text-warning);
   font-size: 0.85em;

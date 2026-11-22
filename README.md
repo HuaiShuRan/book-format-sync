@@ -89,6 +89,25 @@ Default layout:
 
 The book root, folder-per-book behavior, chapter format, and title length can be changed in plugin settings.
 
+### Per-book original and output paths
+
+Settings include an optional **Per-book paths** group. Entries are added and removed manually; the plugin does not auto-scan the vault for mappings.
+
+Each entry has:
+
+```text
+bookName       book identifier (also the output filename stem)
+originalPath   original md/txt/epub file path (vault-relative)
+mdDir          Markdown output directory
+txtDir         TXT output directory
+epubDir        EPUB output directory
+```
+
+Paths are vault-relative. Absolute paths and any `..` segment are rejected with an explicit error. Empty output directory fields fall back to `10 书籍/<bookName>/`; an empty original path falls back to the default book directory (or the legacy root location for that book). Output directories are created automatically.
+
+Removing an entry does not delete generated files. Existing settings without `bookProfiles` migrate to an empty list and keep the default behavior.
+
+
 ### Title suggestions
 
 The local title generator detects:
@@ -162,6 +181,7 @@ book-format-sync/
 - Chapter number gaps/duplicates are reported, not renumbered.
 - Title suggestions are local and extractive; they may be plain or truncated, and should be reviewed before applying.
 - Markdown 2em indentation depends on the plugin CSS and Obsidian internal `cm-line`/`HyperMD-*` classes; source bytes stay clean, but source mode may show visual indentation and upgrades may require re-checking.
+- Per-book path entries are manual; batch scanning still uses the default book root, so a book entirely outside that root must be converted from its configured original file/right-click entry.
 
 ## License
 

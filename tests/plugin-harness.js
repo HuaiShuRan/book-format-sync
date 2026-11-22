@@ -138,6 +138,7 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
     overwrite: true,
     txtLineEnding: 'lf',
     txtBom: false,
+    bookProfiles: [],
   };
 
   const dest = await plugin.destinationFor('10 书籍/测试书.md');
@@ -185,11 +186,46 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
   assert.ok(files.has('10 书籍/测试书/测试书.epub'));
   assert.ok([...files.keys()].some((key) => key.startsWith('.book-format-sync/backups/')), '覆盖前应备份');
 
+  // 自定义每本书输出路径：默认目录不应再产生重复文件；清空配置后恢复默认。
+  const profileSource = '00 收件箱/路径测试.txt';
+  files.set(profileSource, Buffer.from(`第1章 001
+
+　　第一段。
+
+第2章 002
+
+　　第二段。
+`, 'utf8'));
+  const profileSourceHash = sha(files.get(profileSource));
+  plugin.settings.bookProfiles = [{
+    id: 'profile-test',
+    bookName: '路径测试',
+    originalPath: profileSource,
+    mdDir: '自定义/md',
+    txtDir: '自定义/txt',
+    epubDir: '自定义/epub',
+  }];
+  app.workspace.getActiveFile = () => ({ path: profileSource });
+  await plugin.convertActiveFile();
+  assert.ok(files.has('自定义/md/路径测试.md'));
+  assert.ok(files.has('自定义/txt/路径测试.txt'));
+  assert.ok(files.has('自定义/epub/路径测试.epub'));
+  assert.ok(![...files.keys()].some((key) => key.startsWith('10 书籍/路径测试/')), '默认目录不应产生重复文件');
+  assert.strictEqual(sha(files.get(profileSource)), profileSourceHash, '原件必须保持不变');
+
+  plugin.settings.bookProfiles = [];
+  await plugin.convertActiveFile();
+  assert.ok(files.has('10 书籍/路径测试/路径测试.md'));
+  assert.ok(files.has('10 书籍/路径测试/路径测试.txt'));
+  assert.ok(files.has('10 书籍/路径测试/路径测试.epub'));
+  assert.strictEqual(sha(files.get(profileSource)), profileSourceHash, '清空配置后原件仍不变');
+
   console.log('plugin harness ok');
   console.log('  source hash unchanged:', before);
   console.log('  groups:', groups.map((g) => g.name));
   console.log('  files:', [...files.keys()].filter((key) => key.startsWith('10 书籍/测试书/')));
   console.log('  backups:', [...files.keys()].filter((key) => key.startsWith('.book-format-sync/backups/')).length);
+  console.log('  custom profile files:', [...files.keys()].filter((key) => key.startsWith('自定义/')));
 })().catch((error) => {
   console.error(error);
   process.exit(1);
