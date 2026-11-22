@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.8] - 2026-11-22
+
+### Fixed
+
+- Short chapter titles containing two or more exclamation/question marks (for example `第38章 不准磕！不准磕！`) were misclassified as inline body text, causing TXT verification to expect a title-less heading. Inline-body detection now requires a longer remainder before using punctuation as the signal.
+
 ## [1.3.7] - 2026-11-22
 
 ### Changed

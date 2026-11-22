@@ -164,6 +164,13 @@ test('TXT 正文中的“第一回/第三节”不当作章节', () => {
   assert.ok(book.chapters[0].body.includes('第三节 上课'));
 });
 
+test('带感叹号的短章节标题不被当作正文', () => {
+  const book = splitTxtBook('第38章 不准磕！不准磕！\n\n　　正文。\n', {});
+  assert.strictEqual(book.chapters.length, 1);
+  assert.strictEqual(book.chapters[0].normalizedTitle, '第38章 不准磕！不准磕！');
+  assert.strictEqual(book.chapters[0].title, '不准磕！不准磕！');
+});
+
 test('重复章节号且长标题似正文时按正文处理', () => {
   const book = splitTxtBook(`第1章 开始
 　　正文一。
