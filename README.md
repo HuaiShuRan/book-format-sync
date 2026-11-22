@@ -10,7 +10,8 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
 
 ## Features
 
-- **Chapter heading normalization**: `第1章` / `第十章` / `第１２章` → `第001章 …`; numbers are padded to 3 digits.
+- **Chapter heading normalization**: `第1章` / `第十章` / `第１２章` → `第001章 …`; number width is automatic: 81 chapters → `第01章`, 340 chapters → `第001章`.
+- **Same-line TXT chapters**: a line like `第01章 道可道…` is split into a number-only heading plus body when the remainder is long or contains multiple sentence endings; the whole chapter is not treated as a title.
 - **Consistent paragraph indentation**:
   - Markdown: frontmatter `cssclasses: book-format-sync`; reading view uses `p`, editor/live preview uses `.cm-line`; no `&emsp;` entities in the source.
   - TXT: two full-width spaces

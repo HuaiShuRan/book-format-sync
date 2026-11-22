@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /** 用内存 vault 验证插件的路径解析、写入、三格式落盘，不启动 Obsidian。 */
 
@@ -164,7 +164,7 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
   assert.ok(files.has('10 书籍/测试书/测试书.txt'));
   assert.ok(files.has('10 书籍/测试书/测试书.epub'));
   assert.strictEqual(sha(files.get('10 书籍/测试书.md')), before, '源文件必须保持不变');
-  assert.ok(files.get('10 书籍/测试书/测试书.txt').toString('utf8').includes('第001章 开始。'));
+  assert.ok(files.get('10 书籍/测试书/测试书.txt').toString('utf8').includes('第1章 开始。'));
 
   const groups = await plugin.scanLibrary();
   assert.strictEqual(groups.length, 1);
@@ -244,5 +244,6 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
   console.error(error);
   process.exit(1);
 });
+
 
 

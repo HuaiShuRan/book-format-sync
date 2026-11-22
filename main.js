@@ -20,6 +20,8 @@ const {
   splitMarkdownBook,
   splitTxtBook,
   parseChapterTitle,
+  formatChapterTitle,
+  numberPadForChapters,
   collectWarnings,
   rulesWithDefaults,
 } = __require("lib/chapters.js");
@@ -114,6 +116,16 @@ function buildFrontmatter(book, bookName) {
 
 function normalizeChapters(chapters, rules, warnings) {
   return chapters.map((chapter) => {
+    const number = Number(chapter.number);
+    if (chapter.inlineBody || (chapter.title === '' && Number.isSafeInteger(number))) {
+      return {
+        ...chapter,
+        number,
+        title: '',
+        normalizedTitle: formatChapterTitle(number, '', rules),
+        sourceTitle: chapter.sourceTitle || chapter.rawTitle || '',
+      };
+    }
     const candidates = [chapter.sourceTitle, chapter.rawTitle, chapter.title, chapter.normalizedTitle]
       .filter(Boolean);
     let parsed = null;
@@ -181,24 +193,23 @@ function parseBook(input) {
     input.author || metadata['作者'] || metadata.author || metadata.Author || parsed.author || '',
   ).trim();
 
-  const chapters = normalizeChapters(
-    parsed.chapters.map((chapter) => {
-      const body = String(chapter.body || '');
-      const markdownParagraphs = sourceFormat === 'md' ? splitParagraphs(body) : [];
-      const plainParagraphs = splitParagraphs(
-        sourceFormat === 'md' ? markdownToPlain(body) : body,
-      );
-      return {
-        ...chapter,
-        markdownParagraphs,
-        plainParagraphs,
-        markdownBody: markdownParagraphs.join('\n\n'),
-        plainBody: plainParagraphs.join('\n\n'),
-      };
-    }),
-    rules,
-    warnings,
-  );
+  const prepared = parsed.chapters.map((chapter) => {
+    const body = String(chapter.body || '');
+    const markdownParagraphs = sourceFormat === 'md' ? splitParagraphs(body) : [];
+    const plainParagraphs = splitParagraphs(
+      sourceFormat === 'md' ? markdownToPlain(body) : body,
+    );
+    return {
+      ...chapter,
+      markdownParagraphs,
+      plainParagraphs,
+      markdownBody: markdownParagraphs.join('\n\n'),
+      plainBody: plainParagraphs.join('\n\n'),
+    };
+  });
+  const numberPad = numberPadForChapters(prepared);
+  const finalRules = { ...rules, numberPad };
+  const chapters = normalizeChapters(prepared, finalRules, warnings);
 
   const preWarnings = [...(parsed.warnings || []), ...warnings];
   const allWarnings = collectWarnings(chapters, preWarnings);
@@ -217,6 +228,7 @@ function parseBook(input) {
     metadata,
     preamble: String(parsed.preamble || '').trim(),
     chapters,
+    numberPad,
     warnings: [...new Set(allWarnings)],
     stats: {
       chapterCount: chapters.length,
@@ -497,7 +509,10 @@ function verifyRendered(book, rendered, rules) {
 function renderBook(book, options) {
   const opts = options || {};
   const bookName = opts.bookName || book.bookName;
-  const rules = rulesWithDefaults(opts.rules);
+  const rules = rulesWithDefaults({
+    ...(opts.rules || {}),
+    numberPad: book.numberPad || (opts.rules && opts.rules.numberPad),
+  });
   const md = Buffer.from(serializeMarkdown(book, { ...opts, bookName }), 'utf8');
   const txt = Buffer.from(serializeTxt(book, opts), 'utf8');
   const epub = buildEpub(book, { ...opts, bookName });
@@ -635,7 +650,9 @@ function parseNumberToken(token) {
 function parseChapterTitle(rawTitle, rules) {
   const opts = rulesWithDefaults(rules);
   const text = String(rawTitle == null ? '' : rawTitle).trim();
-  if (!text || text.length > 160) return null;
+  // Markdown headings can be longer than a prose line; the TXT path still
+  // applies its own 160-character guard before calling this parser.
+  if (!text || text.length > 512) return null;
 
   const prefix = escapeRegExp(opts.prefix);
   const suffix = escapeRegExp(opts.suffix);
@@ -668,6 +685,76 @@ function formatChapterTitle(number, title, rules) {
     .trim();
   if (cleanTitle) result += `${opts.separator}${cleanTitle}`;
   return result;
+}
+
+/** 章节序号宽度：按章节总数（并兼顾最大章号）计算，如 81 章 → 2 位。 */
+function numberPadForChapters(chapters) {
+  const list = Array.isArray(chapters) ? chapters : [];
+  const count = list.length;
+  let maxNumber = 0;
+  for (const chapter of list) {
+    const number = Number(chapter && chapter.number);
+    if (Number.isSafeInteger(number) && number > maxNumber) maxNumber = number;
+  }
+  const width = String(Math.max(count, maxNumber, 1)).length;
+  return Math.max(1, Math.min(8, width));
+}
+
+/** 判断“第N章”后面的剩余文本是否其实是正文，而不是标题。 */
+function isInlineChapterBody(rest) {
+  const text = String(rest == null ? '' : rest).trim();
+  if (!text) return false;
+  if (text.length > 40) return true;
+  const sentenceEnds = (text.match(/[。！？!?；;]/g) || []).length;
+  return sentenceEnds >= 2;
+}
+
+/**
+ * 解析 TXT 的整行章节行：可能是“第N章 标题”，也可能是“第N章 正文...”。
+ * 方案 A：长文本/多句末标点视为正文，标题只保留“第N章”。
+ */
+function parseChapterLine(rawLine, rules) {
+  const opts = rulesWithDefaults(rules);
+  const text = String(rawLine == null ? '' : rawLine).trim();
+  if (!text || text.length > 10000) return null;
+  const re = new RegExp(
+    `^${escapeRegExp(opts.prefix)}\\s*([${NUMBER_CHARS}]+)\\s*${escapeRegExp(opts.suffix)}([\\s\\S]*)$`,
+  );
+  const match = re.exec(text);
+  if (!match) return null;
+  const number = parseNumberToken(match[1]);
+  if (!Number.isSafeInteger(number) || number < 0 || number > 999999) return null;
+
+  const rest = match[2].trim();
+  if (!rest) {
+    return {
+      number,
+      title: '',
+      normalizedTitle: formatChapterTitle(number, '', opts),
+      raw: text,
+      body: '',
+      inlineBody: false,
+    };
+  }
+  if (isInlineChapterBody(rest)) {
+    return {
+      number,
+      title: '',
+      normalizedTitle: formatChapterTitle(number, '', opts),
+      raw: text,
+      body: rest,
+      inlineBody: true,
+    };
+  }
+  const title = rest.replace(/^[\s:：、.．\-—–]+/, '').trim().replace(/[\s\u3000]+/g, ' ');
+  return {
+    number,
+    title,
+    normalizedTitle: formatChapterTitle(number, title, opts),
+    raw: text,
+    body: '',
+    inlineBody: false,
+  };
 }
 
 /** 判断一行是否像章节名，但可能因为格式不符合规范而没被识别。 */
@@ -756,6 +843,7 @@ function makeChapter(parsed, lines) {
     title: parsed.title,
     normalizedTitle: parsed.normalizedTitle,
     sourceTitle: parsed.raw,
+    inlineBody: Boolean(parsed.inlineBody),
     lines: trimBlankLines(lines),
     body: trimBlankLines(lines).join('\n'),
   };
@@ -844,16 +932,17 @@ function splitTxtBook(text, rules) {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    const parsed = trimmed.length <= 160 ? parseChapterTitle(trimmed, rules) : null;
+    // TXT 可能把章节标题和正文放在同一行；512 字以内交给结构解析，
+    // 由 parseChapterLine 判断是短标题还是“第N章 + 正文”。
+    const parsed = trimmed.length <= 512 ? parseChapterLine(trimmed, rules) : null;
     let duplicateProse = false;
     if (parsed) {
       duplicateProse = seenNumbers.has(parsed.number)
-        && parsed.title.length > 20
-        && /[，；]/.test(parsed.title);
+        && (parsed.inlineBody || (parsed.title.length > 20 && /[，；]/.test(parsed.title)));
       if (!duplicateProse) {
         finishCurrent();
         seenNumbers.add(parsed.number);
-        current = { parsed, lines: [] };
+        current = { parsed, lines: parsed.body ? [parsed.body] : [] };
         continue;
       }
       warnings.push(`重复章节号且标题似正文，已按正文保留：${trimmed.slice(0, 80)}`);
@@ -896,7 +985,10 @@ module.exports = {
   parseNumberToken,
   chineseToNumber,
   parseChapterTitle,
+  parseChapterLine,
   formatChapterTitle,
+  numberPadForChapters,
+  isInlineChapterBody,
   looksChapterish,
   isUncoveredSectionHeading,
   matchMarkdownHeading,
@@ -2512,10 +2604,13 @@ class BookFormatSyncPlugin extends Plugin {
     };
   }
 
-  renderOptions(bookName) {
+  renderOptions(bookName, numberPad) {
     return {
       bookName,
-      rules: this.rules,
+      rules: {
+        ...this.rules,
+        numberPad: Number(numberPad) || this.rules.numberPad,
+      },
       txtLineEnding: this.settings.txtLineEnding === 'crlf' ? 'crlf' : 'lf',
       txtBom: Boolean(this.settings.txtBom),
     };
@@ -2737,7 +2832,7 @@ class BookFormatSyncPlugin extends Plugin {
     if (!dirs || !dirs.md || !dirs.txt || !dirs.epub) {
       throw new PathConfigError('输出目录配置不完整，无法生成三格式。');
     }
-    const rendered = renderBook(book, this.renderOptions(book.bookName));
+    const rendered = renderBook(book, this.renderOptions(book.bookName, book.numberPad));
     const backupRoot = posixJoin('.book-format-sync', 'backups', timestamp());
     const results = [];
     const backedUp = new Set();
@@ -2823,7 +2918,7 @@ class BookFormatSyncPlugin extends Plugin {
         `md 输出：${outputs.md}`,
         `txt 输出：${outputs.txt}`,
         `epub 输出：${outputs.epub}`,
-        `章节规范：${this.rules.prefix}${'0'.repeat(Math.max(0, this.rules.numberPad - 1))}1${this.rules.suffix}${this.rules.separator}标题`,
+        `章节规范：${this.rules.prefix}${'0'.repeat(Math.max(0, parsed.book.numberPad - 1))}1${this.rules.suffix}${this.rules.separator}标题`,
         warnings.length ? `注意：有 ${warnings.length} 条警告，将在完成后列出。` : '未发现章节号异常。',
         '',
         '会生成 md、txt、epub 三个同名文件；已存在的旧文件先备份到 .book-format-sync/backups。',
@@ -3037,7 +3132,7 @@ class BookFormatSyncPlugin extends Plugin {
     const cache = await this.loadTitleCache(parsed.book.bookName);
     const built = buildTitleSuggestions(parsed.book, {
       maxChars,
-      rules: this.rules,
+      rules: { ...this.rules, numberPad: parsed.book.numberPad || this.rules.numberPad },
       bookName: parsed.book.bookName,
       contentHash: (chapter) => this.chapterHash(chapter),
       cache: cache.chapters,
@@ -3132,7 +3227,10 @@ class BookFormatSyncPlugin extends Plugin {
 
     for (const item of prepared) {
       item.chapter.title = item.title;
-      item.chapter.normalizedTitle = formatChapterTitle(item.chapter.number, item.title, this.rules);
+      item.chapter.normalizedTitle = formatChapterTitle(item.chapter.number, item.title, {
+        ...this.rules,
+        numberPad: book.numberPad || this.rules.numberPad,
+      });
     }
 
     try {
@@ -3837,15 +3935,8 @@ class BookFormatSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
     new Setting(containerEl)
-      .setName('编号位数')
-      .setDesc('默认 3，生成“第001章”。')
-      .addText((text) => text
-        .setValue(String(this.plugin.settings.numberPad))
-        .onChange(async (value) => {
-          const number = Math.max(1, Math.min(8, Number(value) || 3));
-          this.plugin.settings.numberPad = number;
-          await this.plugin.saveSettings();
-        }));
+      .setName('章节编号位数')
+      .setDesc('自动按全书章节数计算：81 章为“第01章”，340 章为“第001章”，1000 章为“第0001章”。');
     new Setting(containerEl)
       .setName('编号与标题分隔符')
       .setDesc('默认一个半角空格。')

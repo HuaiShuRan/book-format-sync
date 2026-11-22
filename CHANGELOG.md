@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.6] - 2026-11-22
+
+### Fixed
+
+- Same-line TXT chapter bodies such as `第01章 道可道…` are split into an empty title plus body, so the whole chapter is no longer treated as a chapter title.
+- Long chapter titles (over 160 characters after normalization) caused the md/txt verification parser to undercount chapters; heading parsing now allows up to 512 characters and normalized TXT headings bypass the 160-character prose guard.
+
+### Changed
+
+- Chapter number width is now automatic from the book's chapter count (and maximum chapter number): 81 chapters → `第01章`, 340 → `第001章`.
+- Removed the manual number-padding input from settings.
+
 ## [1.3.5] - 2026-11-22
 
 ### Added

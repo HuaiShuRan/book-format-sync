@@ -214,10 +214,13 @@ class BookFormatSyncPlugin extends Plugin {
     };
   }
 
-  renderOptions(bookName) {
+  renderOptions(bookName, numberPad) {
     return {
       bookName,
-      rules: this.rules,
+      rules: {
+        ...this.rules,
+        numberPad: Number(numberPad) || this.rules.numberPad,
+      },
       txtLineEnding: this.settings.txtLineEnding === 'crlf' ? 'crlf' : 'lf',
       txtBom: Boolean(this.settings.txtBom),
     };
@@ -439,7 +442,7 @@ class BookFormatSyncPlugin extends Plugin {
     if (!dirs || !dirs.md || !dirs.txt || !dirs.epub) {
       throw new PathConfigError('输出目录配置不完整，无法生成三格式。');
     }
-    const rendered = renderBook(book, this.renderOptions(book.bookName));
+    const rendered = renderBook(book, this.renderOptions(book.bookName, book.numberPad));
     const backupRoot = posixJoin('.book-format-sync', 'backups', timestamp());
     const results = [];
     const backedUp = new Set();
@@ -525,7 +528,7 @@ class BookFormatSyncPlugin extends Plugin {
         `md 输出：${outputs.md}`,
         `txt 输出：${outputs.txt}`,
         `epub 输出：${outputs.epub}`,
-        `章节规范：${this.rules.prefix}${'0'.repeat(Math.max(0, this.rules.numberPad - 1))}1${this.rules.suffix}${this.rules.separator}标题`,
+        `章节规范：${this.rules.prefix}${'0'.repeat(Math.max(0, parsed.book.numberPad - 1))}1${this.rules.suffix}${this.rules.separator}标题`,
         warnings.length ? `注意：有 ${warnings.length} 条警告，将在完成后列出。` : '未发现章节号异常。',
         '',
         '会生成 md、txt、epub 三个同名文件；已存在的旧文件先备份到 .book-format-sync/backups。',
@@ -739,7 +742,7 @@ class BookFormatSyncPlugin extends Plugin {
     const cache = await this.loadTitleCache(parsed.book.bookName);
     const built = buildTitleSuggestions(parsed.book, {
       maxChars,
-      rules: this.rules,
+      rules: { ...this.rules, numberPad: parsed.book.numberPad || this.rules.numberPad },
       bookName: parsed.book.bookName,
       contentHash: (chapter) => this.chapterHash(chapter),
       cache: cache.chapters,
@@ -834,7 +837,10 @@ class BookFormatSyncPlugin extends Plugin {
 
     for (const item of prepared) {
       item.chapter.title = item.title;
-      item.chapter.normalizedTitle = formatChapterTitle(item.chapter.number, item.title, this.rules);
+      item.chapter.normalizedTitle = formatChapterTitle(item.chapter.number, item.title, {
+        ...this.rules,
+        numberPad: book.numberPad || this.rules.numberPad,
+      });
     }
 
     try {
@@ -1539,15 +1545,8 @@ class BookFormatSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
     new Setting(containerEl)
-      .setName('编号位数')
-      .setDesc('默认 3，生成“第001章”。')
-      .addText((text) => text
-        .setValue(String(this.plugin.settings.numberPad))
-        .onChange(async (value) => {
-          const number = Math.max(1, Math.min(8, Number(value) || 3));
-          this.plugin.settings.numberPad = number;
-          await this.plugin.saveSettings();
-        }));
+      .setName('章节编号位数')
+      .setDesc('自动按全书章节数计算：81 章为“第01章”，340 章为“第001章”，1000 章为“第0001章”。');
     new Setting(containerEl)
       .setName('编号与标题分隔符')
       .setDesc('默认一个半角空格。')

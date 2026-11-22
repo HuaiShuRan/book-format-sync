@@ -143,20 +143,21 @@ const app = {
   assert.ok(files.has(txtPath));
   assert.ok(files.has(epubPath));
   const md = files.get(mdPath).toString('utf8');
-  assert.ok(md.includes('## 第001章 新标题内容'));
-  assert.ok(md.includes('## 第002章 002'));
-  assert.ok(files.get(txtPath).toString('utf8').includes('第001章 新标题内容'));
+  assert.ok(md.includes('## 第1章 新标题内容'));
+  assert.ok(md.includes('## 第2章 002'));
+  assert.ok(files.get(txtPath).toString('utf8').includes('第1章 新标题内容'));
   assert.ok(files.has('.book-format-sync/titles/标题测试.json'));
   const cacheJson = JSON.parse(files.get('.book-format-sync/titles/标题测试.json').toString('utf8'));
   assert.strictEqual(cacheJson.chapters['0'].status, 'accepted');
   assert.ok([...files.keys()].some((key) => key.startsWith('.book-format-sync/backups/')));
 
   console.log('title apply harness ok');
-  console.log('  md has:', '## 第001章 新标题内容');
+  console.log('  md has:', '## 第1章 新标题内容');
   console.log('  cache:', cacheJson.chapters['0'].status);
 })().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
 
 
