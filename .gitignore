@@ -1,0 +1,23 @@
+# Local vault content and generated artifacts
+.book-format-sync/
+node_modules/
+dist/
+demo-out/
+demo-report.json
+VERIFICATION.md
+tests/vault-convert.js
+tools/check-triple.js
+tools/check_epub.py
+
+# Book files that must never be committed
+*.epub
+*.txt
+
+# OS / editor / secrets
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env
+*.token

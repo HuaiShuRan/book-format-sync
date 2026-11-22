@@ -1,0 +1,9 @@
+{
+  "id": "book-format-sync",
+  "name": "书库三格式同步",
+  "version": "1.3.0",
+  "minAppVersion": "1.5.0",
+  "description": "维护每本书的 txt、md、epub 三格式：统一章节名为“第001章 标题”，正文段落首行统一 2em 缩进，兼容“一行一段”TXT，支持文件列表右键操作，并可在确认后为纯数字章节名生成中文标题，写入前校验、覆盖前备份。",
+  "author": "HuaiShuRan",
+  "isDesktopOnly": true
+}

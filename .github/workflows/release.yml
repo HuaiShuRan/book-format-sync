@@ -1,0 +1,67 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build plugin
+        run: node tools/build.js
+
+      - name: Ensure committed bundle is current
+        run: git diff --exit-code -- main.js
+
+      - name: Core tests
+        run: node tests/run-tests.js
+
+      - name: Plugin harness
+        run: node tests/plugin-harness.js
+
+      - name: Title apply harness
+        run: node tests/title-apply-harness.js
+
+      - name: Menu harness
+        run: node tests/menu-harness.js
+
+      - name: Validate manifest version against tag
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+          const tag = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+          if (manifest.version !== tag) {
+            console.error(`manifest version ${manifest.version} != tag ${tag}`);
+            process.exit(1);
+          }
+          console.log(`version ${tag} ok`);
+          NODE
+
+      - name: Create release zip
+        run: |
+          zip -r "book-format-sync-${GITHUB_REF_NAME#v}.zip" \
+            main.js manifest.json styles.css
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            main.js manifest.json styles.css \
+            "book-format-sync-${GITHUB_REF_NAME#v}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

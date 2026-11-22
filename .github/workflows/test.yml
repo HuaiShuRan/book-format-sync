@@ -1,0 +1,38 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build plugin
+        run: node tools/build.js
+
+      - name: Ensure committed bundle is current
+        run: git diff --exit-code -- main.js
+
+      - name: Core tests
+        run: node tests/run-tests.js
+
+      - name: Plugin harness
+        run: node tests/plugin-harness.js
+
+      - name: Title apply harness
+        run: node tests/title-apply-harness.js
+
+      - name: Menu harness
+        run: node tests/menu-harness.js
