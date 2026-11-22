@@ -60,7 +60,7 @@ file_epub: "[[epub]"
 
 　　第一段。
 
-## 第02章 全角编号。
+## 第2章 全角编号。
 
 　　第二段。
 
@@ -98,22 +98,22 @@ function fixtureTxt() {
 }
 
 console.log('章节名规范化');
-test('阿拉伯数字补零', () => {
-  assert.strictEqual(parseChapterTitle('第1章 被遗忘的救世主。').normalizedTitle, '第001章 被遗忘的救世主。');
+test('阿拉伯数字自然编号', () => {
+  assert.strictEqual(parseChapterTitle('第1章 被遗忘的救世主。').normalizedTitle, '第1章 被遗忘的救世主。');
 });
 test('全角数字', () => {
-  assert.strictEqual(parseChapterTitle('第１２章 测试').normalizedTitle, '第012章 测试');
+  assert.strictEqual(parseChapterTitle('第１２章 测试').normalizedTitle, '第12章 测试');
 });
 test('中文数字', () => {
   assert.strictEqual(chineseToNumber('一百零二'), 102);
   assert.strictEqual(chineseToNumber('十二'), 12);
-  assert.strictEqual(parseChapterTitle('第十章 测试').normalizedTitle, '第010章 测试');
+  assert.strictEqual(parseChapterTitle('第十章 测试').normalizedTitle, '第10章 测试');
 });
 test('无标题不编造', () => {
-  assert.strictEqual(parseChapterTitle('第7章').normalizedTitle, '第007章');
+  assert.strictEqual(parseChapterTitle('第7章').normalizedTitle, '第7章');
 });
 test('冒号分隔规范为空格', () => {
-  assert.strictEqual(parseChapterTitle('第3章：标题').normalizedTitle, '第003章 标题');
+  assert.strictEqual(parseChapterTitle('第3章：标题').normalizedTitle, '第3章 标题');
 });
 test('规范外标题不匹配', () => {
   assert.strictEqual(parseChapterTitle('序章 开始'), null);
@@ -124,9 +124,9 @@ test('不把全角缩进的 ## 当标题', () => {
   const book = splitMarkdownBook(fixtureMarkdown(), {});
   assert.strictEqual(book.chapters.length, 4);
   assert.deepStrictEqual(book.chapters.map((ch) => ch.normalizedTitle), [
-    '第001章 真正的开始。',
-    '第002章 全角编号。',
-    '第010章 中文数字。',
+    '第1章 真正的开始。',
+    '第2章 全角编号。',
+    '第10章 中文数字。',
     '序章 规范未覆盖。',
   ]);
   assert.ok(book.preamble.includes('这是正文里的假标题'));
@@ -186,28 +186,28 @@ const titleChapters = [
   {
     number: 1,
     title: '001',
-    normalizedTitle: '第001章 001',
+    normalizedTitle: '第1章 001',
     plainBody: '实至名归。金桂奖落幕，唐若遥拿下影后。',
     plainParagraphs: ['实至名归。金桂奖落幕，唐若遥拿下影后。'],
   },
   {
     number: 2,
     title: '缘',
-    normalizedTitle: '第002章 缘',
+    normalizedTitle: '第2章 缘',
     plainBody: '她站在窗前，很久没有说话。',
     plainParagraphs: ['她站在窗前，很久没有说话。'],
   },
   {
     number: 3,
     title: '开始',
-    normalizedTitle: '第003章 开始',
+    normalizedTitle: '第3章 开始',
     plainBody: '故事从这一天开始。',
     plainParagraphs: ['故事从这一天开始。'],
   },
   {
     number: 4,
     title: '开始',
-    normalizedTitle: '第004章 开始',
+    normalizedTitle: '第4章 开始',
     plainBody: '另一个开始。',
     plainParagraphs: ['另一个开始。'],
   },
@@ -239,7 +239,7 @@ test('本地生成标题并保留数字编号', () => {
   });
   const first = built.suggestions.find((item) => item.index === 0);
   assert.strictEqual(first.title, '实至名归');
-  assert.strictEqual(first.normalizedTitle, '第001章 实至名归');
+  assert.strictEqual(first.normalizedTitle, '第1章 实至名归');
   assert.ok(titleLength(first.title) <= 10);
   assert.ok(built.suggestions.find((item) => item.index === 1).severity === 'soft');
   assert.ok(built.suggestions.find((item) => item.index === 2).severity === 'hard');
@@ -310,7 +310,7 @@ test('空路径校验通过且非法配置报错', () => {
 });
 
 test('章节行正文可生成并往返', () => {
-  const line = `第001章 ${'长'.repeat(170)}`;
+  const line = `第1章 ${'长'.repeat(170)}`;
   const txt = `${line}\n`;
   const book = parseBook({ sourcePath: '长正文.txt', sourceFormat: 'txt', data: Buffer.from(txt, 'utf8') });
   assert.strictEqual(book.chapters.length, 1);
@@ -334,7 +334,7 @@ test('解析 Markdown 样书', () => {
   const data = fs.readFileSync(sourceMd);
   mdBook = parseBook({ sourcePath: sourceMd, sourceFormat: 'md', data });
   assert.strictEqual(mdBook.stats.chapterCount, 4);
-  assert.strictEqual(mdBook.chapters[0].normalizedTitle, '第01章 真正的开始。');
+  assert.strictEqual(mdBook.chapters[0].normalizedTitle, '第1章 真正的开始。');
 });
 
 test('生成 md/txt/epub 并通过内存校验', () => {
@@ -364,8 +364,8 @@ test('写出三种格式后逐一重新解析', () => {
 test('三格式首行缩进统一且不叠加', () => {
   const md = rendered.md.toString('utf8');
   const txt = rendered.txt.toString('utf8');
-  assert.ok(md.includes('## 第01章 真正的开始。'));
-  assert.ok(!/^[ \t\u3000]+## 第01章/m.test(md));
+  assert.ok(md.includes('## 第1章 真正的开始。'));
+  assert.ok(!/^[ \t\u3000]+## 第1章/m.test(md));
   assert.ok(md.includes('cssclasses: book-format-sync'));
   assert.ok(md.includes('\n第一段。'));
   assert.ok(!md.includes('&emsp;'));
@@ -374,7 +374,7 @@ test('三格式首行缩进统一且不叠加', () => {
   assert.ok(pluginCss.includes('.markdown-source-view.book-format-sync'));
   assert.ok(pluginCss.includes('.cm-line:not(.HyperMD-header)'));
   assert.ok(!md.includes('\n　　'));
-  assert.ok(txt.includes('\n第01章 真正的开始。\n'));
+  assert.ok(txt.includes('\n第1章 真正的开始。\n'));
   assert.ok(txt.includes('\n　　第一段。'));
   assert.ok(!txt.includes('\n　　　　第一段。'));
   const zip = readZip(rendered.epub);
@@ -390,8 +390,8 @@ test('从 TXT 生成另外两种，源文件哈希不变', () => {
   const out = renderBook(book, { bookName: book.bookName });
   assert.strictEqual(book.stats.chapterCount, 3);
   assert.deepStrictEqual(book.chapters.map((ch) => ch.normalizedTitle), [
-    '第01章 真正的开始。',
-    '第02章 全角编号。',
+    '第1章 真正的开始。',
+    '第2章 全角编号。',
     '第10章 中文数字。',
   ]);
   assert.ok(out.md.toString('utf8').includes('&#35;&#35; 第9章'));
@@ -422,7 +422,7 @@ test('EPUB 结构合法', () => {
   const opf = zip.get('OEBPS/content.opf').toString('utf8');
   const nav = zip.get('OEBPS/nav.xhtml').toString('utf8');
   assert.ok(opf.includes('测试书'));
-  assert.ok(nav.includes('第01章 真正的开始。'));
+  assert.ok(nav.includes('第1章 真正的开始。'));
 });
 
 console.log('编码');
@@ -438,4 +438,5 @@ test('清理临时目录', () => {
 });
 
 console.log(`\n${passed} tests passed`);
+
 

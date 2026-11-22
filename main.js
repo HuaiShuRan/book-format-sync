@@ -21,7 +21,6 @@ const {
   splitTxtBook,
   parseChapterTitle,
   formatChapterTitle,
-  numberPadForChapters,
   collectWarnings,
   rulesWithDefaults,
 } = __require("lib/chapters.js");
@@ -207,9 +206,7 @@ function parseBook(input) {
       plainBody: plainParagraphs.join('\n\n'),
     };
   });
-  const numberPad = numberPadForChapters(prepared);
-  const finalRules = { ...rules, numberPad };
-  const chapters = normalizeChapters(prepared, finalRules, warnings);
+  const chapters = normalizeChapters(prepared, rules, warnings);
 
   const preWarnings = [...(parsed.warnings || []), ...warnings];
   const allWarnings = collectWarnings(chapters, preWarnings);
@@ -228,7 +225,6 @@ function parseBook(input) {
     metadata,
     preamble: String(parsed.preamble || '').trim(),
     chapters,
-    numberPad,
     warnings: [...new Set(allWarnings)],
     stats: {
       chapterCount: chapters.length,
@@ -509,10 +505,7 @@ function verifyRendered(book, rendered, rules) {
 function renderBook(book, options) {
   const opts = options || {};
   const bookName = opts.bookName || book.bookName;
-  const rules = rulesWithDefaults({
-    ...(opts.rules || {}),
-    numberPad: book.numberPad || (opts.rules && opts.rules.numberPad),
-  });
+  const rules = rulesWithDefaults(opts.rules);
   const md = Buffer.from(serializeMarkdown(book, { ...opts, bookName }), 'utf8');
   const txt = Buffer.from(serializeTxt(book, opts), 'utf8');
   const epub = buildEpub(book, { ...opts, bookName });
@@ -561,7 +554,6 @@ module.exports = {
 const DEFAULT_RULES = Object.freeze({
   prefix: '第',
   suffix: '章',
-  numberPad: 3,
   separator: ' ',
 });
 
@@ -590,7 +582,6 @@ function rulesWithDefaults(rules) {
   const merged = { ...DEFAULT_RULES, ...(rules || {}) };
   merged.prefix = String(merged.prefix == null ? '第' : merged.prefix);
   merged.suffix = String(merged.suffix == null ? '章' : merged.suffix);
-  merged.numberPad = Math.max(1, Math.min(8, Number(merged.numberPad) || 3));
   merged.separator = String(merged.separator == null ? ' ' : merged.separator);
   return merged;
 }
@@ -675,29 +666,16 @@ function parseChapterTitle(rawTitle, rules) {
   };
 }
 
-/** 按规范生成章节名：“第001章 标题”；无标题时不会凭空补“无标题”。 */
+/** 按规范生成章节名：“第1章 标题”；章节序号不补零。 */
 function formatChapterTitle(number, title, rules) {
   const opts = rulesWithDefaults(rules);
-  const padded = String(Math.max(0, Number(number) || 0)).padStart(opts.numberPad, '0');
-  let result = `${opts.prefix}${padded}${opts.suffix}`;
+  const value = Math.max(0, Number(number) || 0);
+  let result = `${opts.prefix}${value}${opts.suffix}`;
   const cleanTitle = String(title == null ? '' : title)
     .replace(/[\s\u3000]+/g, ' ')
     .trim();
   if (cleanTitle) result += `${opts.separator}${cleanTitle}`;
   return result;
-}
-
-/** 章节序号宽度：按章节总数（并兼顾最大章号）计算，如 81 章 → 2 位。 */
-function numberPadForChapters(chapters) {
-  const list = Array.isArray(chapters) ? chapters : [];
-  const count = list.length;
-  let maxNumber = 0;
-  for (const chapter of list) {
-    const number = Number(chapter && chapter.number);
-    if (Number.isSafeInteger(number) && number > maxNumber) maxNumber = number;
-  }
-  const width = String(Math.max(count, maxNumber, 1)).length;
-  return Math.max(1, Math.min(8, width));
 }
 
 /** 判断“第N章”后面的剩余文本是否其实是正文，而不是标题。 */
@@ -766,7 +744,7 @@ function looksChapterish(text) {
 
 /**
  * 规范只定义“第N章”。序章、楔子、番外、第N回/节/卷等仍应作为章节边界，
- * 但标题原样保留，不改成“第001章”，也不猜编号。
+ * 但标题原样保留，不改成“第1章”，也不猜编号。
  * TXT 的“第N回/节”经常出现在正文句子开头，可通过 numberedSections:false 关闭。
  */
 function isUncoveredSectionHeading(text, options) {
@@ -987,7 +965,6 @@ module.exports = {
   parseChapterTitle,
   parseChapterLine,
   formatChapterTitle,
-  numberPadForChapters,
   isInlineChapterBody,
   looksChapterish,
   isUncoveredSectionHeading,
@@ -2430,7 +2407,6 @@ const DEFAULT_SETTINGS = Object.freeze({
   folderPerBook: true,
   chapterPrefix: '第',
   chapterSuffix: '章',
-  numberPad: 3,
   chapterSeparator: ' ',
   backup: true,
   overwrite: true,
@@ -2599,18 +2575,14 @@ class BookFormatSyncPlugin extends Plugin {
     return {
       prefix: this.settings.chapterPrefix,
       suffix: this.settings.chapterSuffix,
-      numberPad: Number(this.settings.numberPad) || 3,
       separator: this.settings.chapterSeparator,
     };
   }
 
-  renderOptions(bookName, numberPad) {
+  renderOptions(bookName) {
     return {
       bookName,
-      rules: {
-        ...this.rules,
-        numberPad: Number(numberPad) || this.rules.numberPad,
-      },
+      rules: this.rules,
       txtLineEnding: this.settings.txtLineEnding === 'crlf' ? 'crlf' : 'lf',
       txtBom: Boolean(this.settings.txtBom),
     };
@@ -2832,7 +2804,7 @@ class BookFormatSyncPlugin extends Plugin {
     if (!dirs || !dirs.md || !dirs.txt || !dirs.epub) {
       throw new PathConfigError('输出目录配置不完整，无法生成三格式。');
     }
-    const rendered = renderBook(book, this.renderOptions(book.bookName, book.numberPad));
+    const rendered = renderBook(book, this.renderOptions(book.bookName));
     const backupRoot = posixJoin('.book-format-sync', 'backups', timestamp());
     const results = [];
     const backedUp = new Set();
@@ -2918,7 +2890,7 @@ class BookFormatSyncPlugin extends Plugin {
         `md 输出：${outputs.md}`,
         `txt 输出：${outputs.txt}`,
         `epub 输出：${outputs.epub}`,
-        `章节规范：${this.rules.prefix}${'0'.repeat(Math.max(0, parsed.book.numberPad - 1))}1${this.rules.suffix}${this.rules.separator}标题`,
+        `章节规范：${this.rules.prefix}${parsed.book.chapters.length ? parsed.book.chapters[0].number : 1}${this.rules.suffix}${this.rules.separator}标题（不补零）`,
         warnings.length ? `注意：有 ${warnings.length} 条警告，将在完成后列出。` : '未发现章节号异常。',
         '',
         '会生成 md、txt、epub 三个同名文件；已存在的旧文件先备份到 .book-format-sync/backups。',
@@ -3132,7 +3104,7 @@ class BookFormatSyncPlugin extends Plugin {
     const cache = await this.loadTitleCache(parsed.book.bookName);
     const built = buildTitleSuggestions(parsed.book, {
       maxChars,
-      rules: { ...this.rules, numberPad: parsed.book.numberPad || this.rules.numberPad },
+      rules: this.rules,
       bookName: parsed.book.bookName,
       contentHash: (chapter) => this.chapterHash(chapter),
       cache: cache.chapters,
@@ -3227,10 +3199,7 @@ class BookFormatSyncPlugin extends Plugin {
 
     for (const item of prepared) {
       item.chapter.title = item.title;
-      item.chapter.normalizedTitle = formatChapterTitle(item.chapter.number, item.title, {
-        ...this.rules,
-        numberPad: book.numberPad || this.rules.numberPad,
-      });
+      item.chapter.normalizedTitle = formatChapterTitle(item.chapter.number, item.title, this.rules);
     }
 
     try {
@@ -3936,7 +3905,7 @@ class BookFormatSettingTab extends PluginSettingTab {
         }));
     new Setting(containerEl)
       .setName('章节编号位数')
-      .setDesc('自动按全书章节数计算：81 章为“第01章”，340 章为“第001章”，1000 章为“第0001章”。');
+      .setDesc('章节序号不补零，按数字本身输出：第1章、第10章、第101章；不再按章节数分档。');
     new Setting(containerEl)
       .setName('编号与标题分隔符')
       .setDesc('默认一个半角空格。')

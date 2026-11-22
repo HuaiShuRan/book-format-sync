@@ -1,4 +1,4 @@
-# book-format-sync
+﻿# book-format-sync
 
 Obsidian plugin for maintaining a book library where every book has three formats:
 
@@ -10,8 +10,8 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
 
 ## Features
 
-- **Chapter heading normalization**: `第1章` / `第十章` / `第１２章` → `第001章 …`; number width is automatic: 81 chapters → `第01章`, 340 chapters → `第001章`.
-- **Same-line TXT chapters**: a line like `第01章 道可道…` is split into a number-only heading plus body when the remainder is long or contains multiple sentence endings; the whole chapter is not treated as a title.
+- **Chapter heading normalization**: `第1章` / `第十章` / `第１２章` → `第1章 …`; chapter numbers are never zero-padded: `第1章`, `第10章`, `第101章`.
+- **Same-line TXT chapters**: a line like `第1章 道可道…` is split into a number-only heading plus body when the remainder is long or contains multiple sentence endings; the whole chapter is not treated as a title.
 - **Consistent paragraph indentation**:
   - Markdown: frontmatter `cssclasses: book-format-sync`; reading view uses `p`, editor/live preview uses `.cm-line`; no `&emsp;` entities in the source.
   - TXT: two full-width spaces
@@ -130,7 +130,7 @@ Titles are generated from the first 1–3 paragraphs, max 800 characters:
 The default title length is **10 characters** (configurable 4–24). The numeric chapter prefix is retained:
 
 ```text
-第001章 001 → 第001章 实至名归
+第1章 001 → 第1章 实至名归
 ```
 
 Suggestions are shown in a preview table. Nothing is written until **应用选中标题** is clicked. Duplicate suggestions fall back to another candidate; if none is usable, the numeric title is kept and marked `needs_review`.
@@ -188,3 +188,4 @@ book-format-sync/
 ## License
 
 MIT. See [LICENSE](LICENSE).
+

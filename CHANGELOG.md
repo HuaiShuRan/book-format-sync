@@ -5,6 +5,13 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.7] - 2026-11-22
+
+### Changed
+
+- Chapter numbers are never zero-padded: `第1章`, `第10章`, `第101章`. The automatic chapter-count width rule and maximum-number fallback were removed.
+- Settings now explain the no-padding rule; no manual number-width input was reintroduced.
+
 ## [1.3.6] - 2026-11-22
 
 ### Fixed
