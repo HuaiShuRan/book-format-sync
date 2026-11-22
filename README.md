@@ -59,6 +59,7 @@ Download the release assets and place `manifest.json`, `main.js`, and `styles.cs
 - `书库三格式同步：扫描书库（只读）`
 - `书库三格式同步：生成章节标题建议（本地）`
 - `书库三格式同步：规范化并生成当前书籍三格式`
+- `书库三格式同步：只规范化当前文件`
 - `书库三格式同步：从当前文件转换生成另外两种格式`
 - `书库三格式同步：规范化书库全部书籍`
 
@@ -70,10 +71,11 @@ Right-click a `.md`, `.txt`, or `.epub` file:
 书库三格式同步
 ├─ 生成章节标题建议
 ├─ 规范化并生成三格式
+├─ 只规范化
 └─ 从当前文件生成另外两种
 ```
 
-Actions apply to the right-clicked file, not the currently open tab.
+Actions apply to the right-clicked file, not the currently open tab. `只规范化` writes only the current format, does not create the other two, and force-backs up the current file when it is also the target.
 
 ### Book layout
 

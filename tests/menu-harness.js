@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const assert = require('assert');
 const Module = require('module');
@@ -60,10 +60,11 @@ const menu = makeMenu();
 plugin.addBookFileMenu(menu, file);
 assert.strictEqual(menu.items.length, 1);
 assert.strictEqual(menu.items[0].title, '书库三格式同步');
-assert.strictEqual(menu.items[0].submenu.items.length, 3);
+assert.strictEqual(menu.items[0].submenu.items.length, 4);
 assert.deepStrictEqual(menu.items[0].submenu.items.map((item) => item.title), [
   '生成章节标题建议',
   '规范化并生成三格式',
+  '只规范化',
   '从当前文件生成另外两种',
 ]);
 

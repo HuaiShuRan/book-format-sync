@@ -187,6 +187,20 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
   assert.ok(files.has('10 书籍/测试书/测试书.epub'));
   assert.ok([...files.keys()].some((key) => key.startsWith('.book-format-sync/backups/')), '覆盖前应备份');
 
+  // 只规范化：只写当前格式，不生成另外两种格式。
+  const onlySource = '00 收件箱/只规范化测试.txt';
+  files.set(onlySource, Buffer.from(`第1章 001
+
+　　只规范化正文。
+`, 'utf8'));
+  const onlySourceHash = sha(files.get(onlySource));
+  app.workspace.getActiveFile = () => ({ path: onlySource });
+  await plugin.normalizeOnlyActiveFile();
+  assert.ok(files.has('10 书籍/只规范化测试/只规范化测试.txt'));
+  assert.ok(!files.has('10 书籍/只规范化测试/只规范化测试.md'));
+  assert.ok(!files.has('10 书籍/只规范化测试/只规范化测试.epub'));
+  assert.strictEqual(sha(files.get(onlySource)), onlySourceHash, '只规范化的源文件必须保持不变');
+
   // 自定义每本书输出路径：默认目录不应再产生重复文件；清空配置后恢复默认。
   const profileSource = '00 收件箱/路径测试.txt';
   files.set(profileSource, Buffer.from(`第1章 001

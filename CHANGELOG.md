@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.5] - 2026-11-22
+
+### Added
+
+- `只规范化` command and file-explorer menu item: writes only the current format, does not create the other two, and force-backs up the current file when it is also the target.
+
 ## [1.3.4] - 2026-11-22
 
 ### Changed

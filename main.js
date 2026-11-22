@@ -2420,6 +2420,11 @@ class BookFormatSyncPlugin extends Plugin {
       callback: () => this.normalizeActiveBook(),
     });
     this.addCommand({
+      id: 'normalize-active-file',
+      name: '只规范化当前文件',
+      callback: () => this.normalizeOnlyActiveFile(),
+    });
+    this.addCommand({
       id: 'generate-title-suggestions',
       name: '生成章节标题建议（本地）',
       callback: () => this.generateTitleSuggestions(),
@@ -2461,6 +2466,12 @@ class BookFormatSyncPlugin extends Plugin {
         .setIcon('refresh-cw')
         .onClick(() => {
           void this.normalizeActiveBook(file);
+        }));
+      submenu.addItem((sub) => sub
+        .setTitle('只规范化')
+        .setIcon('file-check')
+        .onClick(() => {
+          void this.normalizeOnlyActiveFile(file);
         }));
       submenu.addItem((sub) => sub
         .setTitle('从当前文件生成另外两种')
@@ -2730,8 +2741,11 @@ class BookFormatSyncPlugin extends Plugin {
     const backupRoot = posixJoin('.book-format-sync', 'backups', timestamp());
     const results = [];
     const backedUp = new Set();
+    const requested = Array.isArray(opts.formats) && opts.formats.length ? opts.formats : FORMATS;
+    const formats = requested.filter((ext) => FORMATS.includes(ext));
+    if (!formats.length) throw new PathConfigError('没有可写入的格式。');
 
-    for (const ext of FORMATS) {
+    for (const ext of formats) {
       const outputDir = normalizeVaultRelativePath(dirs[ext], `${ext} 输出目录`);
       await this.ensureFolder(outputDir);
       const target = posixJoin(outputDir, `${book.bookName}.${ext}`);
@@ -2745,7 +2759,7 @@ class BookFormatSyncPlugin extends Plugin {
         results.push({ ext, target, status: 'exists-skipped' });
         continue;
       }
-      if (existed && this.settings.backup && !backedUp.has(target)) {
+      if (existed && (this.settings.backup || opts.forceBackup) && !backedUp.has(target)) {
         await this.backupFile(target, book.bookName, backupRoot);
         backedUp.add(target);
       }
@@ -2825,6 +2839,60 @@ class BookFormatSyncPlugin extends Plugin {
       new ReportModal(this.app, '规范化完成', parsed.book, result, sourcePath).open();
     } catch (error) {
       new Notice(`生成失败：${error.message}`, 10000);
+    }
+  }
+
+  async normalizeOnlyActiveFile(targetFile) {
+    const file = targetFile || this.app.workspace.getActiveFile();
+    if (!file || !extOf(file.path)) {
+      new Notice('请先打开或右键选择一本 txt、md 或 epub 书籍。');
+      return;
+    }
+    const ext = extOf(file.path);
+    let dest;
+    try {
+      dest = await this.destinationFor(file.path);
+    } catch (error) {
+      new Notice(`路径配置错误：${error.message}`, 9000);
+      return;
+    }
+    const target = dest.targets[ext];
+    const sourceIsTarget = target === file.path;
+    const targetExists = await this.exists(target);
+    let parsed;
+    try {
+      parsed = await this.parseSource(file.path);
+    } catch (error) {
+      new Notice(`解析失败：${error.message}`, 9000);
+      return;
+    }
+
+    const lines = [
+      `源文件：${file.path}`,
+      `只写入格式：${ext}`,
+      `目标文件：${target}`,
+      `章节：${parsed.book.stats.chapterCount} 章`,
+      '只规范化当前文件，不生成另外两种格式，不改动其它已有格式。',
+    ];
+    if (sourceIsTarget) {
+      lines.push('目标就是当前文件：会覆盖当前文件，覆盖前强制备份到 .book-format-sync/backups。');
+    } else if (targetExists) {
+      lines.push('目标已存在：会覆盖目标，覆盖前按设置备份；当前文件保持不变。');
+    } else {
+      lines.push('目标不存在：会新建当前格式的规范化副本；当前文件保持不变。');
+    }
+    if (!(await this.askConfirm('只规范化当前格式', lines))) return;
+
+    try {
+      const result = await this.materialize(parsed.book, dest.outputDirs, {
+        sourcePath: file.path,
+        overwrite: true,
+        forceBackup: sourceIsTarget,
+        formats: [ext],
+      });
+      new ReportModal(this.app, '只规范化完成', parsed.book, result, file.path).open();
+    } catch (error) {
+      new Notice(`只规范化失败：${error.message}`, 10000);
     }
   }
 
