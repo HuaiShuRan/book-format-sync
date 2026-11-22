@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /** 用内存 vault 测试标题应用：确认后才写盘、保留编号、缓存接受状态。 */
 
@@ -23,6 +23,7 @@ Module._load = function fakeLoad(request, parent, isMain) {
       Setting: FakeSetting,
       Notice: FakeNotice,
       Modal: FakeModal,
+      FuzzySuggestModal: FakeModal,
       TFile: FakeTFile,
       normalizePath: (value) => String(value).replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''),
     };
@@ -157,3 +158,5 @@ const app = {
   console.error(error);
   process.exit(1);
 });
+
+

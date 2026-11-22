@@ -37,6 +37,7 @@ Module._load = function fakeLoad(request, parent, isMain) {
       Setting: FakeSetting,
       Notice: FakeNotice,
       Modal: FakeModal,
+      FuzzySuggestModal: FakeModal,
       TFile: FakeTFile,
       normalizePath: (value) => String(value).replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''),
     };
@@ -200,7 +201,6 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
   plugin.settings.bookProfiles = [{
     id: 'profile-test',
     bookName: '路径测试',
-    originalPath: profileSource,
     mdDir: '自定义/md',
     txtDir: '自定义/txt',
     epubDir: '自定义/epub',
@@ -230,3 +230,5 @@ files.set('10 书籍/测试书.md', Buffer.from(fixture, 'utf8'));
   console.error(error);
   process.exit(1);
 });
+
+

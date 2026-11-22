@@ -297,13 +297,14 @@ test('旧设置迁移与书籍条目查找', () => {
   const settings = migrateSettings({ bookRoot: '10 书籍' });
   assert.strictEqual(settings.settingsVersion, 2);
   assert.deepStrictEqual(settings.bookProfiles, []);
-  const profiles = [{ id: 'a', bookName: '某书', originalPath: '00 收件箱/某书.txt' }];
+  const profiles = [{ id: 'a', bookName: '某书' }];
   assert.strictEqual(findBookProfile(profiles, { bookName: '某书' }).id, 'a');
-  assert.strictEqual(findBookProfile(profiles, { sourcePath: '00 收件箱/某书.txt' }).id, 'a');
+  const dropped = migrateSettings({ bookProfiles: [{ bookName: '某书', originalPath: 'private/path.txt' }] });
+  assert.strictEqual(dropped.bookProfiles[0].originalPath, undefined);
 });
 
 test('空路径校验通过且非法配置报错', () => {
-  const normalized = validateProfilePaths({ bookName: '某书', originalPath: '', mdDir: '', txtDir: '', epubDir: '' });
+  const normalized = validateProfilePaths({ bookName: '某书', mdDir: '', txtDir: '', epubDir: '' });
   assert.strictEqual(normalized.bookName, '某书');
   assert.throws(() => validateProfilePaths({ bookName: '某书', mdDir: '../x' }), /不能包含/);
 });

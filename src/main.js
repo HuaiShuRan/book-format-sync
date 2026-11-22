@@ -7,6 +7,7 @@ const {
   Setting,
   Notice,
   Modal,
+  FuzzySuggestModal,
   TFile,
   normalizePath,
 } = require('obsidian');
@@ -287,26 +288,6 @@ class BookFormatSyncPlugin extends Plugin {
   }
 
   async resolveOriginalPath(profile, bookName, preferredPath) {
-    const configured = profile && profile.originalPath
-      ? normalizeVaultRelativePath(profile.originalPath, '原件路径')
-      : '';
-    if (configured) {
-      if (!(await this.exists(configured))) {
-        throw new PathConfigError(`原件路径不存在：${configured}`);
-      }
-      const stat = await this.adapter.stat(configured);
-      if (stat && stat.type === 'folder') {
-        for (const ext of ['md', 'txt', 'epub']) {
-          const candidate = posixJoin(configured, `${bookName}.${ext}`);
-          if (await this.exists(candidate)) return candidate;
-        }
-        throw new PathConfigError(`原件目录中没有《${bookName}》的 md/txt/epub：${configured}`);
-      }
-      if (!extOf(configured)) {
-        throw new PathConfigError(`原件路径必须是 md/txt/epub 文件：${configured}`);
-      }
-      return configured;
-    }
     if (preferredPath && extOf(preferredPath) && await this.exists(preferredPath)) {
       return preferredPath;
     }
@@ -317,7 +298,7 @@ class BookFormatSyncPlugin extends Plugin {
         if (await this.exists(candidate)) return candidate;
       }
     }
-    throw new PathConfigError(`未找到《${bookName}》的原件；请配置“原件路径”，或把文件放到 ${fallback}/。`);
+    throw new PathConfigError(`未找到《${bookName}》的原件；请把文件放到 ${fallback}/，或从当前文件执行转换。`);
   }
 
   async validateProfileEntry(entry) {
@@ -326,9 +307,6 @@ class BookFormatSyncPlugin extends Plugin {
       (item) => item.id !== normalized.id && item.bookName === normalized.bookName,
     );
     if (duplicate) throw new PathConfigError(`书籍标识重复：${normalized.bookName}`);
-    if (normalized.originalPath && !(await this.exists(normalized.originalPath))) {
-      throw new PathConfigError(`原件路径不存在：${normalized.originalPath}`);
-    }
     return normalized;
   }
 
@@ -955,10 +933,42 @@ class BookFormatSyncPlugin extends Plugin {
     new LibraryModal(this.app, this).open();
   }
 
+  pickOutputFolder(onChoose) {
+    const folders = (this.app.vault.getAllLoadedFiles ? this.app.vault.getAllLoadedFiles() : [])
+      .filter((item) => item && item.path && item.path !== '/' && item.children)
+      .sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'));
+    if (!folders.length) {
+      new Notice('vault 中没有可选目录。');
+      return;
+    }
+    new FolderPickerModal(this.app, folders, onChoose).open();
+  }
+
   askConfirm(title, lines) {
     return new Promise((resolve) => {
       new ConfirmModal(this.app, title, lines, resolve).open();
     });
+  }
+}
+
+class FolderPickerModal extends FuzzySuggestModal {
+  constructor(app, folders, onChoose) {
+    super(app);
+    this.folders = folders;
+    this.onChoose = onChoose;
+    this.setPlaceholder('选择 vault 内的输出目录…');
+  }
+
+  getItems() {
+    return this.folders;
+  }
+
+  getItemText(folder) {
+    return folder.path;
+  }
+
+  onChooseItem(folder) {
+    this.onChoose(folder.path);
   }
 }
 
@@ -1339,6 +1349,10 @@ class BookFormatSettingTab extends PluginSettingTab {
       text: '手动添加书籍条目；路径留空时回退到默认目录 10 书籍/<书名>/。路径必须是 vault 内相对路径，输出目录不存在会自动创建。',
       cls: 'bfs-muted',
     });
+    containerEl.createEl('p', {
+      text: '提示：右键单击任一“输出目录”输入框，可从 vault 已有目录中选择。',
+      cls: 'bfs-muted',
+    });
     const profiles = this.plugin.settings.bookProfiles || [];
     if (!profiles.length) {
       containerEl.createEl('p', { text: '尚未配置书籍条目；所有书继续使用默认目录。', cls: 'bfs-muted' });
@@ -1363,7 +1377,7 @@ class BookFormatSettingTab extends PluginSettingTab {
           }));
       header.settingEl.addClass('bfs-profile-header');
 
-      const addPathField = (name, desc, key, placeholder) => {
+      const addPathField = (name, desc, key, placeholder, pickFolder = false) => {
         new Setting(containerEl)
           .setName(name)
           .setDesc(desc)
@@ -1374,6 +1388,16 @@ class BookFormatSettingTab extends PluginSettingTab {
                 entry[key] = value;
                 await this.plugin.saveSettings();
               });
+            if (pickFolder) {
+              text.inputEl.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                this.plugin.pickOutputFolder((folderPath) => {
+                  text.setValue(folderPath);
+                  entry[key] = folderPath;
+                  void this.plugin.saveSettings();
+                });
+              });
+            }
             text.inputEl.addEventListener('blur', async () => {
               try {
                 await this.plugin.validateProfileEntry(entry);
@@ -1384,30 +1408,27 @@ class BookFormatSettingTab extends PluginSettingTab {
           });
       };
 
-      addPathField('书籍标识', '用于匹配书名和生成文件名，例如：放肆by玄笺。', 'bookName', '放肆by玄笺');
-      addPathField(
-        '原件路径',
-        '原始电子书文件路径，例如：00 收件箱/放肆by玄笺.txt；留空则使用默认书籍目录。',
-        'originalPath',
-        '00 收件箱/放肆by玄笺.txt',
-      );
+      addPathField('书籍标识', '用于匹配书名和生成文件名，例如：书名。', 'bookName', '书名');
       addPathField(
         'Markdown 输出目录',
-        '留空回退到 10 书籍/<书名>/。',
+        '留空回退到 10 书籍/<书名>/；右键输入框可选择目录。',
         'mdDir',
-        '10 书籍/放肆by玄笺',
+        '10 书籍/书名',
+        true,
       );
       addPathField(
         'TXT 输出目录',
-        '留空回退到 10 书籍/<书名>/。',
+        '留空回退到 10 书籍/<书名>/；右键输入框可选择目录。',
         'txtDir',
-        '90 附件/放肆by玄笺/txt',
+        '90 附件/书名/txt',
+        true,
       );
       addPathField(
         'EPUB 输出目录',
-        '留空回退到 10 书籍/<书名>/。',
+        '留空回退到 10 书籍/<书名>/；右键输入框可选择目录。',
         'epubDir',
-        '90 附件/放肆by玄笺/epub',
+        '90 附件/书名/epub',
+        true,
       );
     }
 
@@ -1422,7 +1443,6 @@ class BookFormatSettingTab extends PluginSettingTab {
           this.plugin.settings.bookProfiles.push({
             id,
             bookName: '新书',
-            originalPath: '',
             mdDir: '',
             txtDir: '',
             epubDir: '',

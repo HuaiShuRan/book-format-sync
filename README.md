@@ -89,7 +89,7 @@ Default layout:
 
 The book root, folder-per-book behavior, chapter format, and title length can be changed in plugin settings.
 
-### Per-book original and output paths
+### Per-book output paths
 
 Settings include an optional **Per-book paths** group. Entries are added and removed manually; the plugin does not auto-scan the vault for mappings.
 
@@ -97,15 +97,14 @@ Each entry has:
 
 ```text
 bookName       book identifier (also the output filename stem)
-originalPath   original md/txt/epub file path (vault-relative)
 mdDir          Markdown output directory
 txtDir         TXT output directory
 epubDir        EPUB output directory
 ```
 
-Paths are vault-relative. Absolute paths and any `..` segment are rejected with an explicit error. Empty output directory fields fall back to `10 书籍/<bookName>/`; an empty original path falls back to the default book directory (or the legacy root location for that book). Output directories are created automatically.
+Paths are vault-relative. Absolute paths and any `..` segment are rejected with an explicit error. Empty output directory fields fall back to `10 书籍/<bookName>/`. Output directories are created automatically. Right-click an output directory input to choose an existing vault folder.
 
-Removing an entry does not delete generated files. Existing settings without `bookProfiles` migrate to an empty list and keep the default behavior.
+The original file is not configured separately: conversion reads the current file, and batch/right-click normalization reads the same-named md/txt/epub from the default book directory. Removing an entry does not delete generated files. Existing settings without `bookProfiles` migrate to an empty list and keep the default behavior; a legacy `originalPath` field is dropped.
 
 
 ### Title suggestions

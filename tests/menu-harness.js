@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const assert = require('assert');
 const Module = require('module');
@@ -21,6 +21,7 @@ Module._load = function fakeLoad(request, parent, isMain) {
       Setting: FakeSetting,
       Notice: FakeNotice,
       Modal: FakeModal,
+      FuzzySuggestModal: FakeModal,
       TFile: FakeTFile,
       normalizePath: (value) => String(value).replace(/\\/g, '/'),
     };
@@ -75,3 +76,5 @@ assert.strictEqual(otherMenu.items.length, 0);
 console.log('menu harness ok');
 console.log('  parent:', menu.items[0].title);
 console.log('  children:', menu.items[0].submenu.items.map((item) => item.title));
+
+

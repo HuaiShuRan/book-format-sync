@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.4] - 2026-11-22
+
+### Changed
+
+- Removed the per-book original-path input from settings; conversion reads the current file and normalization uses the default book directory.
+- Replaced personal-looking path examples with generic placeholders.
+- Right-clicking an output-directory input now opens a vault folder picker.
+
+### Removed
+
+- Legacy `originalPath` settings are dropped during migration.
+
 ## [1.3.3] - 2026-11-22
 
 ### Added
