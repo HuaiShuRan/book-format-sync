@@ -312,6 +312,8 @@ test('三格式首行缩进统一且不叠加', () => {
   assert.ok(!md.includes('&emsp;'));
   const pluginCss = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
   assert.ok(pluginCss.includes('.book-format-sync p'));
+  assert.ok(pluginCss.includes('.markdown-source-view.book-format-sync'));
+  assert.ok(pluginCss.includes('.cm-line:not(.HyperMD-header)'));
   assert.ok(!md.includes('\n　　'));
   assert.ok(txt.includes('\n第001章 真正的开始。\n'));
   assert.ok(txt.includes('\n　　第一段。'));

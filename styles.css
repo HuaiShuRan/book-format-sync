@@ -9,6 +9,13 @@
   text-indent: 2em;
 }
 
+/* 实时预览/源码模式的 CodeMirror 行。源码字节不变，只做视觉缩进。
+   排除标题、代码块、列表、引用、表格、分隔线和 frontmatter，避免误缩进。 */
+.markdown-source-view.book-format-sync
+  .cm-line:not(.HyperMD-header):not(.HyperMD-codeblock):not(.HyperMD-list-line):not(.HyperMD-quote):not(.HyperMD-table-row):not(.HyperMD-hr):not(.HyperMD-frontmatter) {
+  text-indent: 2em;
+}
+
 .bfs-muted {
   color: var(--text-muted);
   font-size: 0.9em;

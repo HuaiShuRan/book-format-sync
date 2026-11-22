@@ -5,6 +5,13 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-11-22
+
+### Added
+
+- Editor/live-preview paragraph indentation via `.markdown-source-view... .cm-line` CSS.
+- Exclusions for headings, code blocks, lists, quotes, tables, horizontal rules, and frontmatter.
+
 ## [1.3.1] - 2026-11-22
 
 ### Fixed
