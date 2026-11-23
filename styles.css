@@ -16,6 +16,14 @@
   text-indent: 2em;
 }
 
+/* 仅隐藏属性面板中的 cssclasses 行，不删除或修改 YAML；其他属性保持显示。 */
+.book-format-sync .metadata-property[data-property-key="cssclasses"],
+.markdown-source-view.book-format-sync .metadata-property[data-property-key="cssclasses"],
+.markdown-reading-view.book-format-sync .metadata-property[data-property-key="cssclasses"],
+.markdown-preview-view.book-format-sync .metadata-property[data-property-key="cssclasses"] {
+  display: none !important;
+}
+
 .bfs-muted {
   color: var(--text-muted);
   font-size: 0.9em;

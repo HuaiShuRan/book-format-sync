@@ -1,4 +1,4 @@
-﻿# book-format-sync
+# book-format-sync
 
 Obsidian plugin for maintaining a book library where every book has three formats:
 
@@ -18,6 +18,7 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
   - EPUB: `text-indent: 2em`
 - **Three-format conversion**: from `md`, `txt`, or `epub`, generate the other formats without modifying the source file.
 - **Local chapter title suggestions**: detect empty, numeric, placeholder, duplicated titles; generate suggestions from the first sentence/paragraph locally. No AI, no network, no API key.
+- **Clean properties UI**: in notes carrying `book-format-sync`, the plugin hides only the `cssclasses` property row; the YAML field and other properties remain intact.
 - **Right-click menu** on `.md`, `.txt`, `.epub` in the file explorer.
 - **Safe writes**: validate and re-parse all three outputs before writing; back up existing targets under `.book-format-sync/backups/`.
 - **Title suggestion cache** under `.book-format-sync/titles/`; manually edited titles are not overwritten.

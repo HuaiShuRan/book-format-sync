@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.9] - 2026-11-23
+
+### Changed
+
+- Plugin styles hide only the `cssclasses` property row in notes carrying `book-format-sync`; the YAML field and all other properties remain unchanged. Reading/live-preview indentation is unaffected.
+
 ## [1.3.8] - 2026-11-22
 
 ### Fixed

@@ -380,6 +380,7 @@ test('三格式首行缩进统一且不叠加', () => {
   assert.ok(pluginCss.includes('.book-format-sync p'));
   assert.ok(pluginCss.includes('.markdown-source-view.book-format-sync'));
   assert.ok(pluginCss.includes('.cm-line:not(.HyperMD-header)'));
+  assert.ok(pluginCss.includes('.metadata-property[data-property-key="cssclasses"]'));
   assert.ok(!md.includes('\n　　'));
   assert.ok(txt.includes('\n第1章 真正的开始。\n'));
   assert.ok(txt.includes('\n　　第一段。'));
