@@ -8,6 +8,11 @@ md + txt + epub
 
 The plugin normalizes chapter headings, enforces a consistent 2em first-line indent for body paragraphs, converts from any one format to the other two, and can suggest Chinese chapter titles for numeric/placeholder headings.
 
+## Project handoff
+
+- [PROJECT_STATE.md](PROJECT_STATE.md) — current status, confirmed behavior, architecture, tests, release process, known limitations, and next steps.
+- [AGENTS.md](AGENTS.md) — short onboarding checklist for coding agents working in this repository.
+
 ## Features
 
 - **Chapter heading normalization**: `第1章` / `第十章` / `第１２章` → `第1章 …`; chapter numbers are never zero-padded: `第1章`, `第10章`, `第101章`.
