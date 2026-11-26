@@ -1671,11 +1671,11 @@ module.exports = {
  *   20 笔记/书目/                  书籍卡（书架 Base 的数据源）
  *   20 笔记/读书笔记/              读书笔记
  *   90 书架/书架.base              书架 Base
- *   90 附件/                       跨书共享附件
+ *   99 附件/                       跨书共享附件
  */
 
 const INBOX_DIR = '00 收件箱';
-const SHARED_ATTACH_DIR = '90 附件';
+const SHARED_ATTACH_DIR = '99 附件';
 const DIR_NOTE_FILE = '_目录说明.md';
 const RECOMMENDATION_FILE = '书库结构建议.md';
 

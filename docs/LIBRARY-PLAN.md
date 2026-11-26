@@ -122,7 +122,7 @@
 | # | 文件 | 内容 | 验收 |
 |:--:|---|---|---|
 | T11 | `lib/metadata.js` | 从 Open Library / Google Books 查书名元数据，**只填空字段**，不覆盖用户手填 | 有网络/无网络两条路径都有降级 |
-| T12 | 封面 | 下载封面到 `90 附件/<书名>/cover.jpg`，写入 frontmatter `封面` | 只写新文件，不覆盖已有封面 |
+| T12 | 封面 | 下载封面到 `99 附件/<书名>/cover.jpg`，写入 frontmatter `封面` | 只写新文件，不覆盖已有封面 |
 | T13 | `lib/diff.js` | 规范化前的差分预览（哪些章节标题变、哪些缩进变） | 面板里逐条显示，可勾选应用 |
 | T14 | 撤销 | 应用前把原文件备份到 `.book-format-sync/backups/`，面板提供"还原上一版" | 还原后内容字节级一致 |
 
@@ -141,8 +141,8 @@
         "id": "book-...",
         "name": "某书",
         "mdDir": "10 书籍/某书",
-        "txtDir": "90 附件/某书/txt",
-        "epubDir": "90 附件/某书/epub",
+        "txtDir": "99 附件/某书/txt",
+        "epubDir": "99 附件/某书/epub",
         "has": { "md": true, "txt": true, "epub": false },
         "chapterCount": 120,
         "issues": ["missing-epub", "chapter-gap:第10章"]

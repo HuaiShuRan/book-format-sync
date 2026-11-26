@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.7.3] - 2026-11-27
+
+### Changed
+
+- 推荐结构里的共享附件目录由 `90 附件` 改为 **`99 附件`**，与 `90 书架` 区分开。
+
 ## [1.7.2] - 2026-11-27
 
 ### Fixed

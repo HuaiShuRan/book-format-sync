@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /**
  * 书库内容框架（v1.4）测试：模板生成与路径计算。
@@ -101,7 +101,7 @@ test('非法文件名字符被替换', () => {
 console.log('封面取值');
 
 test('vault 路径转成 wikilink', () => {
-  assert.strictEqual(coverValue('90 附件/某书/cover.jpg'), '"[[90 附件/某书/cover.jpg]]"');
+  assert.strictEqual(coverValue('99 附件/某书/cover.jpg'), '"[[99 附件/某书/cover.jpg]]"');
   assert.strictEqual(coverValue('[[cover.jpg]]'), '"[[cover.jpg]]"');
   assert.strictEqual(coverValue('![[cover.jpg|300]]'), '"[[cover.jpg]]"');
 });
@@ -128,8 +128,8 @@ test('frontmatter 闭合且含关键字段', () => {
 });
 
 test('封面写入 frontmatter', () => {
-  const text = bookCardTemplate({ name: '某书', cover: '90 附件/某书/cover.jpg' });
-  assert.ok(text.includes('封面: "[[90 附件/某书/cover.jpg]]"'));
+  const text = bookCardTemplate({ name: '某书', cover: '99 附件/某书/cover.jpg' });
+  assert.ok(text.includes('封面: "[[99 附件/某书/cover.jpg]]"'));
 });
 
 test('无封面时字段留空', () => {
@@ -332,7 +332,7 @@ test('默认配置生成推荐的六类目录', () => {
     '20 笔记/书目',
     '20 笔记/读书笔记',
     '90 书架',
-    '90 附件',
+    '99 附件',
   ]);
   assert.strictEqual(plan.basePath, '90 书架/书架.base');
 });
