@@ -15,6 +15,7 @@ const {
   coverValue,
   normalizeDir,
   normalizeShelfBase,
+  coverFileName,
   bookCardPath,
   readingNotePath,
   bookCardTemplate,
@@ -257,6 +258,21 @@ test('封面用 png 时写入正确扩展名与类型', () => {
   }));
   assert.ok(zip.names.includes('OEBPS/cover.png'));
   assert.ok(zip.get('OEBPS/content.opf').toString('utf8').includes('media-type="image/png"'));
+});
+
+console.log('封面命名');
+
+test('有作者时生成《书名》-作者封面.ext', () => {
+  assert.strictEqual(coverFileName('道德经', '老子', 'jpg'), '《道德经》-老子封面.jpg');
+});
+
+test('无作者时生成《书名》封面.ext', () => {
+  assert.strictEqual(coverFileName('道德经', '', 'png'), '《道德经》封面.png');
+  assert.strictEqual(coverFileName('道德经', '  ', '.PNG'), '《道德经》封面.png');
+});
+
+test('封面文件名中的非法字符被替换', () => {
+  assert.strictEqual(coverFileName('a/b', 'c:d', 'png'), '《a_b》-c_d封面.png');
 });
 
 console.log('YAML 与时间');

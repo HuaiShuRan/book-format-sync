@@ -5,6 +5,25 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-11-26
+
+### Added
+
+- 功能区新增「新建书籍卡」按钮，默认开启。
+- 设置页新增「功能区：书库按钮」「功能区：新建书籍卡按钮」两个开关，可分别隐藏对应按钮。
+- 设置页新增「封面自动重命名」开关：新建书籍卡时把选中的图片重命名为 `《书名》-作者封面.ext`（无作者时 `《书名》封面.ext`）。
+- 新建书籍卡弹窗新增「作者」输入与「选择图片」按钮：可直接从 vault 图片列表中搜索选择封面。
+- 新增纯函数 `coverFileName()`（`lib/templates.js`），负责封面命名规则。
+
+### Fixed
+
+- 修复命令面板「新建书籍卡」「新建读书笔记」因模态框签名变更而变成空操作的问题。
+- 功能区图标的提示文字由「书库三格式同步」更正为「书库」。
+
+### Removed
+
+- 移除命令「刷新书架 Base」与面板上的刷新按钮：Bases 视图本身实时查询，Base 数据源变化时插件已自动重写，无需手动刷新。
+
 ## [1.4.0] - 2026-11-26
 
 ### Added

@@ -1,9 +1,9 @@
 # book-library — 项目状态与交接摘要
 
-> 最后整理：2026-11-23  
-> 当前版本：`1.4.0`  
+> 最后整理：2026-11-26  
+> 当前版本：`1.4.1`  
 > 仓库：<https://github.com/HuaiShuRan/book-format-sync>  
-> 最新 Release：<https://github.com/HuaiShuRan/book-format-sync/releases/tag/v1.3.9>（`v1.4.0` 尚未发布）
+> 最新 Release：<https://github.com/HuaiShuRan/book-format-sync/releases/tag/v1.3.9>（`v1.4.x` 尚未发布）
 
 这份文件用于换电脑、重新 clone 或交给另一个 AI 时快速接手。先读本文件，再读 `README.md` 和 `AGENTS.md`。
 
@@ -151,6 +151,13 @@ node tools/build.js
   "txtLineEnding": "lf",
   "txtBom": false,
   "maxTitleChars": 10,
+  "cardDir": "20 笔记/书目",
+  "readingNoteDir": "20 笔记/读书笔记",
+  "shelfBasePath": "20 笔记/书架.base",
+  "autoShelf": true,
+  "ribbonLibrary": true,
+  "ribbonNewCard": true,
+  "autoRenameCover": true,
   "bookProfiles": [
     {
       "id": "book-...",
@@ -186,18 +193,26 @@ node tools/build.js
 规范化书库全部书籍
 新建书籍卡
 新建读书笔记
-生成书架看板
 ```
 
-新命令的输出位置（v1.4.0）：
+功能区（左侧图标，可在设置里逐个开关）：
 
-| 命令 | 生成位置 |
+```text
+书库          -> 打开书库面板
+新建书籍卡    -> 打开建卡弹窗（书名 / 作者 / 封面）
+```
+
+新命令的输出位置（v1.4.1）：
+
+| 命令 / 行为 | 生成位置 |
 |---|---|
-| 新建书籍卡 | `<笔记目录>/书目/<书名>.md` |
-| 新建读书笔记 | `<笔记目录>/读书笔记/<书名>.md` |
-| 生成书架看板 | `<笔记目录>/00 书架.base`（Bases 看板）+ `<笔记目录>/00 书架.md`（落地页） |
+| 新建书籍卡 | `<书籍卡片目录>/<书名>.md`，默认 `20 笔记/书目` |
+| 新建读书笔记 | `<读书笔记目录>/<书名>.md`，默认 `20 笔记/读书笔记` |
+| 书架 Base | 自动维护在 `<书架 Base 路径>`，默认 `20 笔记/书架.base` |
 
-`<笔记目录>` 由设置项「笔记目录」决定，默认 `20 笔记`。书籍卡与读书笔记已存在时只打开、不覆盖；书架看板已存在时先确认再覆盖。
+书籍卡与读书笔记已存在时只打开、不覆盖。书架 Base 在插件加载、新建书籍卡、修改卡片目录时自动重写；Bases 视图本身实时查询，因此没有手动刷新命令。
+
+封面命名（设置项「封面自动重命名」开启时）：选中图片会在原目录重命名为 `《书名》-作者封面.ext`，无作者时为 `《书名》封面.ext`；重命名走 Obsidian 文件管理器，已有链接会同步更新。
 
 文件列表右键：
 

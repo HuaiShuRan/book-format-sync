@@ -235,3 +235,14 @@
   font-size: 0.85em;
   color: var(--text-muted);
 }
+
+.bfs-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bfs-cover-row .bfs-name-input {
+  flex: 1;
+  margin: 0;
+}

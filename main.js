@@ -1727,6 +1727,15 @@ function coverValue(cover) {
   return `"[[${cleaned}]]"`;
 }
 
+/** 封面重命名规则：《书名》-作者封面.ext；无作者时《书名》封面.ext。 */
+function coverFileName(bookName, author, ext) {
+  const name = String(bookName == null ? '' : bookName).trim() || '未命名';
+  const who = String(author == null ? '' : author).trim();
+  const suffix = String(ext == null ? 'png' : ext).replace(/^\./, '').toLowerCase() || 'png';
+  const base = who ? `《${name}》-${who}封面` : `《${name}》封面`;
+  return `${sanitizeFileName(base)}.${suffix}`;
+}
+
 /** 书籍卡：一本书一篇，承载元数据与摘录。 */
 function bookCardTemplate(options) {
   const opts = options || {};
@@ -1882,6 +1891,7 @@ module.exports = {
   coverValue,
   normalizeDir,
   normalizeShelfBase,
+  coverFileName,
   bookCardPath,
   readingNotePath,
   bookCardTemplate,
@@ -2657,6 +2667,7 @@ const {
   readingNoteTemplate,
   shelfBoardTemplate,
   normalizeShelfBase,
+  coverFileName,
   todayStamp,
 } = __require("lib/templates.js");
 
@@ -2676,6 +2687,9 @@ const DEFAULT_SETTINGS = Object.freeze({
   readingNoteDir: '20 笔记/读书笔记',
   shelfBasePath: '20 笔记/书架.base',
   autoShelf: true,
+  ribbonLibrary: true,
+  ribbonNewCard: true,
+  autoRenameCover: true,
   settingsVersion: 2,
 });
 
@@ -2748,7 +2762,9 @@ class BookFormatSyncPlugin extends Plugin {
     this.statusBar.addClass('mod-clickable');
     this.registerDomEvent(this.statusBar, 'click', () => this.openLibrary());
 
-    this.addRibbonIcon('library', '书库三格式同步', () => this.openLibrary());
+    this.libraryRibbon = null;
+    this.newCardRibbon = null;
+    this.applyRibbonVisibility();
 
     this.addCommand({
       id: 'scan-library',
@@ -2783,17 +2799,12 @@ class BookFormatSyncPlugin extends Plugin {
     this.addCommand({
       id: 'new-book-card',
       name: '新建书籍卡',
-      callback: () => this.promptBookName('新建书籍卡', (name) => this.createBookCard(name)),
+      callback: () => this.newBookCardFlow(),
     });
     this.addCommand({
       id: 'new-reading-note',
       name: '新建读书笔记',
-      callback: () => this.promptBookName('新建读书笔记', (name) => this.createReadingNote(name)),
-    });
-    this.addCommand({
-      id: 'refresh-shelf-base',
-      name: '刷新书架 Base',
-      callback: () => { void this.refreshShelfBase(true); },
+      callback: () => this.newReadingNoteFlow(),
     });
 
     this.addSettingTab(new BookFormatSettingTab(this.app, this));
@@ -2802,6 +2813,62 @@ class BookFormatSyncPlugin extends Plugin {
     }));
     this.registerEvent(this.app.workspace.on('file-open', () => this.updateStatusBar()));
     this.app.workspace.onLayoutReady(() => { this.updateStatusBar(); void this.refreshShelfBase(); });
+  }
+
+  /** 按设置创建/移除功能区按钮。 */
+  applyRibbonVisibility() {
+    const wantLibrary = this.settings.ribbonLibrary !== false;
+    if (wantLibrary && !this.libraryRibbon) {
+      this.libraryRibbon = this.addRibbonIcon('library', '书库', () => this.openLibrary());
+    } else if (!wantLibrary && this.libraryRibbon) {
+      this.libraryRibbon.remove();
+      this.libraryRibbon = null;
+    }
+
+    const wantCard = this.settings.ribbonNewCard !== false;
+    if (wantCard && !this.newCardRibbon) {
+      this.newCardRibbon = this.addRibbonIcon('book-plus', '新建书籍卡', () => this.newBookCardFlow());
+    } else if (!wantCard && this.newCardRibbon) {
+      this.newCardRibbon.remove();
+      this.newCardRibbon = null;
+    }
+  }
+
+  newBookCardFlow() {
+    new BookNameModal(this.app, (payload) => {
+      void this.createBookCard(payload.name, payload.author, payload.cover);
+    }).open();
+  }
+
+  newReadingNoteFlow() {
+    new BookNameModal(this.app, (payload) => {
+      void this.createReadingNote(payload.name);
+    }, { heading: '新建读书笔记', showAuthor: false, showCover: false }).open();
+  }
+
+  /**
+   * 把选中的图片重命名为《书名》-作者封面.ext（设置里可关闭）。
+   * 只用 vault 内图片；远程地址原样返回。
+   */
+  async applyCoverNaming(bookName, author, cover) {
+    try {
+      const linkText = String(cover || '').replace(/^!?\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
+      if (!linkText || /^https?:\/\//i.test(linkText)) return cover;
+      const target = this.app.metadataCache.getFirstLinkpathDest(linkText, '');
+      if (!target) return cover;
+      const ext = (target.extension || 'png').toLowerCase();
+      const wantedPath = posixJoin(posixDirname(target.path), coverFileName(bookName, author, ext));
+      if (target.path === wantedPath) return target.path;
+      if (await this.exists(wantedPath)) {
+        new Notice(`已有同名封面，沿用原文件：${target.path}`, 6000);
+        return target.path;
+      }
+      await this.app.fileManager.renameFile(target, wantedPath);
+      new Notice(`封面已重命名为：${posixBasename(wantedPath)}`, 5000);
+      return wantedPath;
+    } catch (error) {
+      return cover;
+    }
   }
 
   addBookFileMenu(menu, file) {
@@ -3726,16 +3793,17 @@ class BookFormatSyncPlugin extends Plugin {
     return normalizeVaultRelativePath(normalizeShelfBase(configured, DEFAULT_SHELF_BASE), '书架 Base 路径');
   }
 
-  promptBookName(onSubmit) {
-    new BookNameModal(this.app, (payload) => { void onSubmit(payload); }).open();
-  }
-
   /** 新建书籍卡：已存在则不覆盖，直接打开。 */
-  async createBookCard(bookName, cover) {
+  async createBookCard(bookName, author, cover) {
     const name = String(bookName || '').trim();
     if (!name) {
       new Notice('书籍名不能为空。');
       return false;
+    }
+    const authorText = String(author || '').trim();
+    let coverRef = String(cover || '').trim();
+    if (coverRef && this.settings.autoRenameCover !== false) {
+      coverRef = await this.applyCoverNaming(name, authorText, coverRef);
     }
     let rel;
     try {
@@ -3749,7 +3817,7 @@ class BookFormatSyncPlugin extends Plugin {
       await this.app.workspace.openLinkText(rel, '', false);
       return false;
     }
-    const content = bookCardTemplate({ name, cover, bookRoot: this.rootPath, date: todayStamp() });
+    const content = bookCardTemplate({ name, author: authorText, cover: coverRef, bookRoot: this.rootPath, date: todayStamp() });
     await this.ensureFolder(posixDirname(rel));
     await this.adapter.write(rel, content);
     new Notice(`已创建书籍卡：${rel}`, 6000);
@@ -4100,19 +4168,46 @@ class BatchReportModal extends Modal {
   }
 }
 
+class ImagePickerModal extends FuzzySuggestModal {
+  constructor(app, onChoose) {
+    super(app);
+    this.onChoose = onChoose;
+    this.setPlaceholder('搜索 vault 内的图片…');
+  }
+
+  getItems() {
+    return this.app.vault.getFiles()
+      .filter((file) => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.path))
+      .sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'));
+  }
+
+  getItemText(file) {
+    return file.path;
+  }
+
+  onChooseItem(file) {
+    if (typeof this.onChoose === 'function') this.onChoose(file);
+  }
+}
+
 class BookNameModal extends Modal {
-  constructor(app, onSubmit) {
+  constructor(app, onSubmit, options) {
     super(app);
     this.onSubmit = typeof onSubmit === 'function' ? onSubmit : () => {};
+    const opts = options || {};
+    this.heading = opts.heading || '新建书籍卡';
+    this.showAuthor = opts.showAuthor !== false;
+    this.showCover = opts.showCover !== false;
     this.name = '';
+    this.author = '';
     this.cover = '';
     this.submitted = false;
   }
 
   onOpen() {
-    this.titleEl.setText('新建书籍卡');
+    this.titleEl.setText(this.heading);
     this.contentEl.createEl('p', {
-      text: '书名应与书库中的书籍目录名一致；封面可填 vault 内图片路径或 http 图片地址，留空也行。',
+      text: '书名应与书库中的书籍目录名一致。',
       cls: 'bfs-muted',
     });
 
@@ -4121,10 +4216,30 @@ class BookNameModal extends Modal {
     nameInput.placeholder = '例如：道德经-老子';
     nameInput.addEventListener('input', () => { this.name = nameInput.value; });
 
-    this.contentEl.createEl('label', { text: '封面（可选）', cls: 'bfs-field-label' });
-    const coverInput = this.contentEl.createEl('input', { type: 'text', cls: 'bfs-name-input' });
-    coverInput.placeholder = '90 附件/某书/cover.jpg 或 https://…';
-    coverInput.addEventListener('input', () => { this.cover = coverInput.value; });
+    let authorInput = null;
+    if (this.showAuthor) {
+      this.contentEl.createEl('label', { text: '作者（可选）', cls: 'bfs-field-label' });
+      authorInput = this.contentEl.createEl('input', { type: 'text', cls: 'bfs-name-input' });
+      authorInput.placeholder = '例如：老子';
+      authorInput.addEventListener('input', () => { this.author = authorInput.value; });
+    }
+
+    let coverInput = null;
+    if (this.showCover) {
+      this.contentEl.createEl('label', { text: '封面（可选）', cls: 'bfs-field-label' });
+      const coverRow = this.contentEl.createDiv({ cls: 'bfs-cover-row' });
+      coverInput = coverRow.createEl('input', { type: 'text', cls: 'bfs-name-input' });
+      coverInput.placeholder = '90 附件/某书/cover.jpg 或 https://…';
+      coverInput.addEventListener('input', () => { this.cover = coverInput.value; });
+      const pick = coverRow.createEl('button', { text: '选择图片' });
+      pick.addEventListener('click', () => {
+        new ImagePickerModal(this.app, (file) => {
+          this.cover = file.path;
+          coverInput.value = file.path;
+          coverInput.focus();
+        }).open();
+      });
+    }
 
     const onKey = (event) => {
       if (event.key === 'Enter') {
@@ -4133,7 +4248,8 @@ class BookNameModal extends Modal {
       }
     };
     nameInput.addEventListener('keydown', onKey);
-    coverInput.addEventListener('keydown', onKey);
+    if (authorInput) authorInput.addEventListener('keydown', onKey);
+    if (coverInput) coverInput.addEventListener('keydown', onKey);
 
     const actions = this.contentEl.createDiv({ cls: 'bfs-actions' });
     const ok = actions.createEl('button', { text: '创建', cls: 'mod-cta' });
@@ -4147,13 +4263,14 @@ class BookNameModal extends Modal {
     if (this.submitted) return;
     this.submitted = true;
     const name = String(this.name || '').trim();
+    const author = String(this.author || '').trim();
     const cover = String(this.cover || '').trim();
     this.close();
     if (!name) {
       new Notice('书籍名不能为空。');
       return;
     }
-    this.onSubmit({ name, cover });
+    this.onSubmit({ name, author, cover });
   }
 
   onClose() {
@@ -4200,20 +4317,12 @@ class LibraryModal extends Modal {
     const toolbar = this.contentEl.createDiv({ cls: 'bfs-actions bfs-toolbar' });
     const newCard = toolbar.createEl('button', { text: '新建书籍卡' });
     newCard.addEventListener('click', () => {
-      this.plugin.promptBookName(async (payload) => {
-        await this.plugin.createBookCard(payload.name, payload.cover);
+      new BookNameModal(this.app, async (payload) => {
+        await this.plugin.createBookCard(payload.name, payload.author, payload.cover);
         this.render();
-      });
+      }).open();
     });
-    const shelf = toolbar.createEl('button', { text: '刷新书架 Base' });
-    shelf.addEventListener('click', async () => {
-      shelf.disabled = true;
-      try {
-        await this.plugin.refreshShelfBase(true);
-      } finally {
-        shelf.disabled = false;
-      }
-    });
+    // 书架 Base 是实时查询，无需手动刷新；目录变更时会自动重写。
 
     if (!this.groups.length) {
       this.contentEl.createEl('p', { text: '没有扫描到书籍。请检查书库目录设置。' });
@@ -4368,6 +4477,38 @@ class BookFormatSettingTab extends PluginSettingTab {
           this.plugin.settings.autoShelf = Boolean(value);
           await this.plugin.saveSettings();
           if (value) await this.plugin.refreshShelfBase();
+        }));
+
+    new Setting(containerEl)
+      .setName('功能区：书库按钮')
+      .setDesc('在左侧功能区显示「书库」按钮（打开书库面板）。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.ribbonLibrary !== false)
+        .onChange(async (value) => {
+          this.plugin.settings.ribbonLibrary = Boolean(value);
+          await this.plugin.saveSettings();
+          this.plugin.applyRibbonVisibility();
+        }));
+
+    new Setting(containerEl)
+      .setName('功能区：新建书籍卡按钮')
+      .setDesc('在左侧功能区显示「新建书籍卡」按钮。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.ribbonNewCard !== false)
+        .onChange(async (value) => {
+          this.plugin.settings.ribbonNewCard = Boolean(value);
+          await this.plugin.saveSettings();
+          this.plugin.applyRibbonVisibility();
+        }));
+
+    new Setting(containerEl)
+      .setName('封面自动重命名')
+      .setDesc('新建书籍卡时，把选中的图片重命名为《书名》-作者封面.ext（无作者时用《书名》封面.ext）。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.autoRenameCover !== false)
+        .onChange(async (value) => {
+          this.plugin.settings.autoRenameCover = Boolean(value);
+          await this.plugin.saveSettings();
         }));
 
     new Setting(containerEl)
