@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-11-26
+
+### Changed
+
+- 合并路径配置：每本书的「路径组」在原有 `mdDir / txtDir / epubDir` 之外新增 `cardDir`。该书的书籍卡优先写入书级 `cardDir`，留空则回退全局「书籍卡片目录」。
+- 书架 Base、封面解析、面板里的"打开书籍卡"都按书级 `cardDir` 定位，不再一律使用全局目录。
+- 书级路径输入框统一为"可见文件夹按钮 + 右键"两种选择方式，提示文案同步更新。
+- 书架 Base 的过滤条件支持多个卡片目录：全局目录 + 各书级 `cardDir` 去重后用 `or` 组合，避免某本书单独设了目录就消失在书架里。
+
+### Notes
+
+- 旧设置无需迁移：`migrateSettings` 会把缺失的 `cardDir` 补成空串，行为等同"使用全局默认"。
+
 ## [1.5.0] - 2026-11-26
 
 ### Added

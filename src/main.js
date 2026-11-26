@@ -362,7 +362,7 @@ class BookFormatSyncPlugin extends Plugin {
     if (!name) return null;
     const candidates = [];
     try {
-      candidates.push(bookCardPath(this.cardDir, name));
+      candidates.push(this.cardPathFor(name));
       candidates.push(posixJoin(this.rootPath, name, `${name}.md`));
       candidates.push(posixJoin(this.rootPath, `${name}.md`));
     } catch (error) {
@@ -1222,6 +1222,36 @@ class BookFormatSyncPlugin extends Plugin {
     return normalizeVaultRelativePath(normalizeShelfBase(configured, DEFAULT_SHELF_BASE), '书架 Base 路径');
   }
 
+  /** 所有用到的卡片目录：全局 + 书级 cardDir（去重，非法路径忽略）。 */
+  allCardDirs() {
+    const dirs = new Set();
+    try {
+      dirs.add(this.cardDir);
+    } catch (error) {
+      dirs.add(DEFAULT_CARD_DIR);
+    }
+    for (const profile of this.settings.bookProfiles || []) {
+      const raw = String((profile && profile.cardDir) || '').trim();
+      if (!raw) continue;
+      try {
+        dirs.add(normalizeVaultRelativePath(raw, '书籍卡片目录'));
+      } catch (error) {
+        // 非法路径不进 Base 过滤
+      }
+    }
+    return Array.from(dirs);
+  }
+
+  /** 某本书的卡片路径：书级 cardDir 优先，否则用全局卡片目录。 */
+  cardPathFor(bookName) {
+    const name = String(bookName || '').trim();
+    const profile = this.profileFor(name, '');
+    const dir = profile && profile.cardDir
+      ? normalizeVaultRelativePath(profile.cardDir, '书籍卡片目录')
+      : this.cardDir;
+    return bookCardPath(dir, name);
+  }
+
   /** 新建书籍卡：已存在则不覆盖，直接打开。 */
   async createBookCard(bookName, author, cover) {
     const name = String(bookName || '').trim();
@@ -1232,7 +1262,7 @@ class BookFormatSyncPlugin extends Plugin {
     const authorText = String(author || '').trim();
     let rel;
     try {
-      rel = bookCardPath(this.cardDir, name);
+      rel = this.cardPathFor(name);
     } catch (error) {
       new Notice(error.message, 8000);
       return false;
@@ -1297,7 +1327,7 @@ class BookFormatSyncPlugin extends Plugin {
       return false;
     }
     if (!manual && this.settings.autoShelf === false) return false;
-    const content = shelfBoardTemplate({ cardDir: this.cardDir, cardSize: this.settings.cardSize, cardAspectRatio: this.settings.cardAspectRatio });
+    const content = shelfBoardTemplate({ cardDirs: this.allCardDirs(), cardSize: this.settings.cardSize, cardAspectRatio: this.settings.cardAspectRatio });
     let existing = null;
     if (await this.exists(target)) {
       try {
@@ -1763,7 +1793,7 @@ class LibraryModal extends Modal {
     const cardPaths = new Map();
     const hasCard = new Map();
     for (const group of this.groups) {
-      cardPaths.set(group.name, bookCardPath(this.plugin.cardDir, group.name));
+      cardPaths.set(group.name, this.plugin.cardPathFor(group.name));
       hasCard.set(group.name, await this.plugin.exists(cardPaths.get(group.name)));
     }
 
@@ -2005,7 +2035,7 @@ class BookFormatSettingTab extends PluginSettingTab {
       cls: 'bfs-muted',
     });
     containerEl.createEl('p', {
-      text: '提示：右键单击任一“输出目录”输入框，可从 vault 已有目录中选择。',
+      text: '提示：每个路径输入框右侧有文件夹按钮，可从 vault 已有目录中选择；右键输入框同样可用。',
       cls: 'bfs-muted',
     });
     const profiles = this.plugin.settings.bookProfiles || [];
@@ -2092,9 +2122,16 @@ class BookFormatSettingTab extends PluginSettingTab {
       );
       addPathField(
         'EPUB 输出目录',
-        '留空回退到 10 书籍/<书名>/；右键输入框可选择目录。',
+        '留空回退到 10 书籍/<书名>/；右侧按钮或右键可选择目录。',
         'epubDir',
         '90 附件/书名/epub',
+        true,
+      );
+      addPathField(
+        '卡片目录',
+        '该书的书籍卡存放目录；留空使用全局「书籍卡片目录」。',
+        'cardDir',
+        '默认 20 笔记/书目',
         true,
       );
     }
@@ -2113,6 +2150,7 @@ class BookFormatSettingTab extends PluginSettingTab {
             mdDir: '',
             txtDir: '',
             epubDir: '',
+            cardDir: '',
           });
           await this.plugin.saveSettings();
           this.display();

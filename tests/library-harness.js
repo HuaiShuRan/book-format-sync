@@ -24,6 +24,7 @@ const {
 } = require('../lib/templates');
 const { buildEpub } = require('../lib/epub');
 const { readZip } = require('../lib/zip');
+const { normalizeBookProfile, migrateSettings, validateProfilePaths } = require('../lib/paths');
 
 let passed = 0;
 
@@ -272,6 +273,20 @@ test('非法尺寸与比例回退默认值', () => {
   assert.ok(text.includes('    imageAspectRatio: 0.72'));
 });
 
+test('多个卡片目录时用 or 过滤', () => {
+  const text = shelfBoardTemplate({ cardDirs: ['20 笔记/书目', '20 笔记/某书卡'] });
+  assert.ok(text.includes('  or:'));
+  assert.ok(text.includes('file.inFolder("20 笔记/书目")'));
+  assert.ok(text.includes('file.inFolder("20 笔记/某书卡")'));
+  assert.ok(!text.includes('  and:'));
+});
+
+test('卡片目录去重', () => {
+  const text = shelfBoardTemplate({ cardDirs: ['a', 'a', 'b'] });
+  assert.strictEqual((text.match(/file\.inFolder\("a"\)/g) || []).length, 1);
+  assert.strictEqual((text.match(/file\.inFolder\("b"\)/g) || []).length, 1);
+});
+
 console.log('封面命名');
 
 test('有作者时生成《书名》-作者封面.ext', () => {
@@ -285,6 +300,24 @@ test('无作者时生成《书名》封面.ext', () => {
 
 test('封面文件名中的非法字符被替换', () => {
   assert.strictEqual(coverFileName('a/b', 'c:d', 'png'), '《a_b》-c_d封面.png');
+});
+
+console.log('书级路径组');
+
+test('书籍路径组保留 cardDir', () => {
+  const entry = normalizeBookProfile({ bookName: '某书', cardDir: '20 笔记/某书卡' }, 0);
+  assert.strictEqual(entry.cardDir, '20 笔记/某书卡');
+});
+
+test('未配置 cardDir 时为空（回退全局）', () => {
+  const migrated = migrateSettings({ bookProfiles: [{ bookName: '某书' }] });
+  assert.strictEqual(migrated.bookProfiles[0].cardDir, '');
+});
+
+test('cardDir 参与路径校验', () => {
+  assert.throws(() => validateProfilePaths({ bookName: '某书', cardDir: 'C:/abs' }), /绝对路径/);
+  assert.throws(() => validateProfilePaths({ bookName: '某书', cardDir: '../out' }), /\.\./);
+  assert.doesNotThrow(() => validateProfilePaths({ bookName: '某书', cardDir: '20 笔记/某书卡' }));
 });
 
 console.log('YAML 与时间');

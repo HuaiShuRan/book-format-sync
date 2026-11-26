@@ -164,7 +164,8 @@ node tools/build.js
       "bookName": "某书",
       "mdDir": "10 书籍/某书",
       "txtDir": "90 附件/某书/txt",
-      "epubDir": "90 附件/某书/epub"
+      "epubDir": "90 附件/某书/epub",
+      "cardDir": "20 笔记/某书卡"
     }
   ],
   "settingsVersion": 2
