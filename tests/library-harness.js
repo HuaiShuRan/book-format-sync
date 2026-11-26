@@ -21,6 +21,8 @@ const {
   readingNoteTemplate,
   shelfBoardTemplate,
 } = require('../lib/templates');
+const { buildEpub } = require('../lib/epub');
+const { readZip } = require('../lib/zip');
 
 let passed = 0;
 
@@ -205,6 +207,56 @@ test('含表格清单视图', () => {
 
 test('不依赖 Dataview', () => {
   assert.strictEqual((shelfBoardTemplate({}).match(/dataview/g) || []).length, 0);
+});
+
+console.log('EPUB 封面');
+
+function sampleBook() {
+  return {
+    bookName: '某书',
+    language: 'zh-CN',
+    author: '',
+    preamble: '',
+    chapters: [
+      { number: 1, title: '第1章', normalizedTitle: '第1章', plainParagraphs: ['正文一段。'] },
+    ],
+  };
+}
+
+test('无封面时不写 cover 条目', () => {
+  const zip = readZip(buildEpub(sampleBook(), { bookName: '某书' }));
+  assert.ok(!zip.names.some((name) => name.startsWith('OEBPS/cover.')));
+  const opf = zip.get('OEBPS/content.opf').toString('utf8');
+  assert.ok(!opf.includes('properties="cover-image"'));
+});
+
+test('有封面时写入图片、OPF 条目与 meta cover', () => {
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+  const zip = readZip(buildEpub(sampleBook(), {
+    bookName: '某书',
+    cover: { data: jpg, ext: 'jpg', mediaType: 'image/jpeg' },
+  }));
+  assert.ok(zip.names.includes('OEBPS/cover.jpg'), '应写入封面图片');
+  assert.deepStrictEqual(Buffer.from(zip.get('OEBPS/cover.jpg')), jpg, '封面字节应一致');
+  const opf = zip.get('OEBPS/content.opf').toString('utf8');
+  assert.ok(opf.includes('properties="cover-image"'));
+  assert.ok(opf.includes('media-type="image/jpeg"'));
+  assert.ok(opf.includes('<meta name="cover" content="cover-image"/>'));
+  assert.strictEqual(
+    zip.names.filter((name) => /^OEBPS\/chapter-\d+\.xhtml$/.test(name)).length,
+    1,
+    '封面不应增加章节文件',
+  );
+});
+
+test('封面用 png 时写入正确扩展名与类型', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const zip = readZip(buildEpub(sampleBook(), {
+    bookName: '某书',
+    cover: { data: png, ext: 'png', mediaType: 'image/png' },
+  }));
+  assert.ok(zip.names.includes('OEBPS/cover.png'));
+  assert.ok(zip.get('OEBPS/content.opf').toString('utf8').includes('media-type="image/png"'));
 });
 
 console.log('YAML 与时间');

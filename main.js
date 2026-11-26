@@ -1413,6 +1413,7 @@ function buildEpub(book, options) {
   const spine = [];
   const navItems = [];
   const entries = [];
+  const cover = opts.cover && opts.cover.data ? opts.cover : null;
 
   const addItem = (item) => {
     manifest.push(item);
@@ -1482,6 +1483,16 @@ p { margin: 0.6em 0; }
 .body-paragraph { text-indent: 2em; }
 .preamble-title { text-indent: 0; font-weight: bold; }`;
 
+  // 封面：只写图片本体 + OPF 元数据，不新增 XHTML 页，避免改变章节文件数量与校验。
+  const coverExt = cover ? String(cover.ext || 'jpg').replace(/^\./, '').toLowerCase() : '';
+  const coverMediaType = cover ? String(cover.mediaType || 'image/jpeg') : '';
+  const coverHref = cover ? `cover.${coverExt}` : '';
+  const coverXml = cover
+    ? `<item id="cover-image" href="${coverHref}" media-type="${escapeXml(coverMediaType)}" properties="cover-image"/>`
+    : '';
+  const coverMetaXml = cover ? '<meta name="cover" content="cover-image"/>' : '';
+  if (cover) entries.push({ name: `OEBPS/${coverHref}`, data: cover.data });
+
   const manifestXml = manifest.map((item) =>
     `<item id="${escapeXml(item.id)}" href="${escapeXml(item.href)}" media-type="${escapeXml(item.mediaType)}"/>`).join('\n');
   const spineXml = spine.map((id) => `<itemref idref="${escapeXml(id)}"/>`).join('\n');
@@ -1494,11 +1505,13 @@ p { margin: 0.6em 0; }
 <dc:language>${escapeXml(language)}</dc:language>
 ${creatorXml}
 <meta property="dcterms:modified">${modified}</meta>
+${coverMetaXml}
 </metadata>
 <manifest>
 <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
 <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
 <item id="style" href="style.css" media-type="text/css"/>
+${coverXml}
 ${manifestXml}
 </manifest>
 <spine toc="ncx">
@@ -2666,6 +2679,17 @@ const DEFAULT_SETTINGS = Object.freeze({
   settingsVersion: 2,
 });
 
+/** 封面图片类型：EPUB cover 条目用。 */
+const IMAGE_MIME = Object.freeze({
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+});
+
 function posixDirname(value) {
   const text = String(value || '').replace(/\\/g, '/');
   const index = text.lastIndexOf('/');
@@ -2861,13 +2885,53 @@ class BookFormatSyncPlugin extends Plugin {
     };
   }
 
-  renderOptions(bookName) {
+  renderOptions(bookName, cover) {
     return {
       bookName,
       rules: this.rules,
       txtLineEnding: this.settings.txtLineEnding === 'crlf' ? 'crlf' : 'lf',
       txtBom: Boolean(this.settings.txtBom),
+      cover: cover || null,
     };
+  }
+
+  /**
+   * 解析书籍封面：优先书籍卡 frontmatter 的「封面」，其次书库内同名 md。
+   * 只处理 vault 内图片；http(s) 远程封面不下载，避免联网与体积不可控。
+   */
+  async resolveCoverForBook(bookName) {
+    const name = String(bookName || '').trim();
+    if (!name) return null;
+    const candidates = [];
+    try {
+      candidates.push(bookCardPath(this.cardDir, name));
+      candidates.push(posixJoin(this.rootPath, name, `${name}.md`));
+      candidates.push(posixJoin(this.rootPath, `${name}.md`));
+    } catch (error) {
+      return null;
+    }
+    for (const mdPath of candidates) {
+      if (!(await this.exists(mdPath))) continue;
+      try {
+        const text = await this.adapter.read(mdPath);
+        const match = text.match(/^封面\s*:\s*(.+)$/m);
+        if (!match) continue;
+        const raw = match[1].trim().replace(/^["']|["']$/g, '').trim();
+        if (!raw || /^https?:\/\//i.test(raw)) continue;
+        const linkText = raw.replace(/^!?\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
+        if (!linkText) continue;
+        const dest = this.app.metadataCache.getFirstLinkpathDest(linkText, mdPath);
+        const target = dest && dest.path ? dest.path : linkText;
+        if (!(await this.exists(target))) continue;
+        const data = await this.readBuffer(target);
+        const ext = (extOf(target) || 'jpg').toLowerCase();
+        const mediaType = IMAGE_MIME[ext] || `image/${ext}`;
+        return { data, ext, mediaType };
+      } catch (error) {
+        // 单个候选失败不影响其它候选
+      }
+    }
+    return null;
   }
 
   async exists(filePath) {
@@ -3086,7 +3150,8 @@ class BookFormatSyncPlugin extends Plugin {
     if (!dirs || !dirs.md || !dirs.txt || !dirs.epub) {
       throw new PathConfigError('输出目录配置不完整，无法生成三格式。');
     }
-    const rendered = renderBook(book, this.renderOptions(book.bookName));
+    const cover = await this.resolveCoverForBook(book.bookName);
+    const rendered = renderBook(book, this.renderOptions(book.bookName, cover));
     const backupRoot = posixJoin('.book-format-sync', 'backups', timestamp());
     const results = [];
     const backedUp = new Set();

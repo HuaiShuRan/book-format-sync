@@ -23,6 +23,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - 设置项重做：`书籍卡片目录`、`读书笔记目录`、`书架 Base 路径`、`自动维护书架 Base`。旧的 `笔记目录` 会自动换算成上述三个路径。
 - 书架 Base 改为按设置自动维护：插件加载、新建书籍卡、修改卡片目录时自动重写；原命令「生成书架看板」替换为「刷新书架 Base」，并且不再生成 `.md` 落地页。
 - 新建书籍卡弹窗新增「封面」输入：支持 vault 内图片路径（写成 `[[...]]`）与 `http(s)` 图片地址。
+- EPUB 生成支持封面：从书籍卡（或书库内同名 md 的）`封面` 属性读取 vault 内图片，写入 `OEBPS/cover.<ext>` 与 OPF 的 `cover-image` 条目及 `<meta name="cover">`；不新增 XHTML 页，因此章节文件数与三格式校验不受影响。远程 `http(s)` 封面不下载。TXT 为纯文本格式，无法内嵌封面。
 - **CSS 数据标识保持不变**：frontmatter 仍写 `cssclasses: book-format-sync`，避免已生成的书籍失去 2em 缩进样式。
 
 ### Notes
