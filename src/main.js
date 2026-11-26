@@ -39,9 +39,11 @@ const {
   bookCardPath,
   readingNotePath,
   shelfBoardPath,
+  shelfNotePath,
   bookCardTemplate,
   readingNoteTemplate,
   shelfBoardTemplate,
+  shelfNoteTemplate,
   todayStamp,
 } = require('../lib/templates');
 
@@ -1087,24 +1089,30 @@ class BookFormatSyncPlugin extends Plugin {
     return true;
   }
 
-  /** 生成书架看板：存在时先确认覆盖。 */
+  /** 生成书架看板（Bases .base + 落地页 .md）：任一侧已存在时先确认覆盖。 */
   async createShelfBoard() {
-    let rel;
+    let basePath;
+    let notePath;
     try {
-      rel = shelfBoardPath(this.notesRoot);
+      basePath = shelfBoardPath(this.notesRoot);
+      notePath = shelfNotePath(this.notesRoot);
     } catch (error) {
       new Notice(error.message, 8000);
       return false;
     }
-    if (await this.exists(rel)) {
-      const ok = await this.askConfirm('书架看板已存在', [`将覆盖：${rel}`, '原有内容会被替换，确定继续？']);
+    const existing = [];
+    if (await this.exists(basePath)) existing.push(basePath);
+    if (await this.exists(notePath)) existing.push(notePath);
+    if (existing.length) {
+      const lines = ['将覆盖：', ...existing, '原有内容会被替换，确定继续？'];
+      const ok = await this.askConfirm('书架看板已存在', lines);
       if (!ok) return false;
     }
-    const content = shelfBoardTemplate({ notesRoot: this.notesRoot, date: todayStamp() });
-    await this.ensureFolder(posixDirname(rel));
-    await this.adapter.write(rel, content);
-    new Notice(`已生成书架看板：${rel}`, 6000);
-    await this.app.workspace.openLinkText(rel, '', false);
+    await this.ensureFolder(posixDirname(basePath));
+    await this.adapter.write(basePath, shelfBoardTemplate({ notesRoot: this.notesRoot }));
+    await this.adapter.write(notePath, shelfNoteTemplate({ notesRoot: this.notesRoot, date: todayStamp() }));
+    new Notice(`已生成书架看板：${basePath}`, 6000);
+    await this.app.workspace.openLinkText(notePath, '', false);
     return true;
   }
 

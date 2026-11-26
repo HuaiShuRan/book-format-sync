@@ -231,40 +231,31 @@ cssclasses: book-format-sync
 - [[（另一本书）]]
 ```
 
-### 7.3 书架看板
+### 7.3 书架看板（Bases）
 
-```markdown
-# 书架
+生成 `00 书架.base`（Obsidian 内置 Bases，不依赖社区插件）+ `00 书架.md` 落地页（嵌入看板）。
 
-## 在读
+- 卡片视图：`image: 封面` 从书籍卡的 `封面` 属性取图，`imageFit` / `imageAspectRatio` / `cardSize` 控制外形
+- 看板视图：`type: kanban` + `groupBy: 状态` + `groupOrder` 固定列顺序（Notion 式看板）
+- 表格视图：全部书目的清单
+- 全局 `filters: file.inFolder("<笔记目录>/书目")` 限定数据源
 
-```dataview
-TABLE 作者, 开始日期, 阅读进度
-FROM "{{bookRoot}}"
-WHERE 状态 = "在读"
-SORT 开始日期 DESC
+```yaml
+filters:
+  and:
+    - file.inFolder("20 笔记/书目")
+views:
+  - type: cards
+    name: 书架
+    image: 封面
+  - type: kanban
+    name: 状态看板
+    groupBy:
+      property: 状态
+      direction: ASC
 ```
 
-## 想读
-
-```dataview
-TABLE 作者, 体裁, 页数
-FROM "{{bookRoot}}"
-WHERE 状态 = "想读"
-SORT 页数 ASC
-```
-
-## 已读
-
-```dataview
-TABLE 作者, 评分, 读完日期
-FROM "{{bookRoot}}"
-WHERE 状态 = "已读"
-SORT 评分 DESC
-```
-```
-
-> 看板依赖 Dataview；若用户未安装，生成的笔记里插入一行提示而不是空白（不静默失败）。
+> 版本要求：Obsidian ≥ 1.9（Bases 卡片视图）、≥ 1.14（看板视图）。低于此版本时看板会退化为可编辑的 YAML 文本。
 
 ---
 

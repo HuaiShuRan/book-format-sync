@@ -8,6 +8,8 @@
 const assert = require('assert');
 const {
   DEFAULT_NOTES_ROOT,
+  SHELF_FILE,
+  SHELF_NOTE_FILE,
   todayStamp,
   yamlValue,
   normalizeNotesRoot,
@@ -15,9 +17,11 @@ const {
   bookCardPath,
   readingNotePath,
   shelfBoardPath,
+  shelfNotePath,
   bookCardTemplate,
   readingNoteTemplate,
   shelfBoardTemplate,
+  shelfNoteTemplate,
 } = require('../lib/templates');
 
 let passed = 0;
@@ -79,7 +83,9 @@ test('书籍卡路径包含子目录', () => {
 
 test('读书笔记与书架路径', () => {
   assert.strictEqual(readingNotePath('20 笔记', '某书'), '20 笔记/读书笔记/某书.md');
-  assert.strictEqual(shelfBoardPath('20 笔记'), '20 笔记/00 书架.md');
+  assert.strictEqual(shelfBoardPath('20 笔记'), `20 笔记/${SHELF_FILE}`);
+  assert.strictEqual(shelfNotePath('20 笔记'), `20 笔记/${SHELF_NOTE_FILE}`);
+  assert.ok(SHELF_FILE.endsWith('.base'), '看板本体必须是 .base');
 });
 
 test('非法文件名字符被替换', () => {
@@ -145,23 +151,67 @@ test('读书笔记书名含引号时不会破坏 frontmatter', () => {
   assert.ok(end > 0, 'frontmatter 应正常闭合');
 });
 
-console.log('书架看板');
+console.log('书架看板（Bases）');
 
-test('书架三个视图与 FROM 路径', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记', date: '2026-11-26' });
-  assertFrontmatterClosed(text, '书架');
-  assert.ok(text.includes('笔记类型: 索引'));
-  assert.strictEqual((text.match(/```dataview/g) || []).length, 4, '应有 4 块 dataview 查询');
-  assert.strictEqual((text.match(/FROM "20 笔记\/书目"/g) || []).length, 4);
-  assert.ok(text.includes('WHERE 状态 = "在读"'));
-  assert.ok(text.includes('WHERE 状态 = "想读"'));
-  assert.ok(text.includes('WHERE 状态 = "已读"'));
-  assertValidTags(parseTags(text), '书架');
+test('看板本体是 YAML，不含前导 frontmatter', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  assert.ok(text.startsWith('#'), '应以便于阅读的注释行开头');
+  assert.ok(!text.startsWith('---'), '不应有 frontmatter 分隔符');
+  assert.ok(text.includes('filters:'));
+  assert.ok(text.includes('views:'));
 });
 
-test('书架未装 Dataview 时有说明而非直接失败', () => {
-  const text = shelfBoardTemplate({});
-  assert.ok(text.includes('Dataview'));
+test('全局筛选限定书籍卡目录', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  assert.ok(text.includes('file.inFolder("20 笔记/书目")'));
+});
+
+test('四个视图类型齐全：cards×2 / kanban / table', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  const count = (re) => (text.match(re) || []).length;
+  assert.strictEqual(count(/^\s+- type: cards$/gm), 2, '应有两个卡片视图');
+  assert.strictEqual(count(/^\s+- type: kanban$/gm), 1, '应有一个看板视图');
+  assert.strictEqual(count(/^\s+- type: table$/gm), 1, '应有一个表格视图');
+});
+
+test('卡片视图用封面属性', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  assert.ok(text.includes('image: 封面'));
+  assert.ok(text.includes('imageFit: contain'));
+  assert.ok(/imageAspectRatio: 0\.\d+/.test(text));
+  assert.ok(/cardSize: \d+/.test(text));
+});
+
+test('看板视图按状态分列', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  assert.ok(text.includes('groupBy:'));
+  assert.ok(text.includes('property: 状态'));
+  for (const status of ['想读', '在读', '已读', '弃读']) {
+    assert.ok(text.includes(`      - ${status}`), `groupOrder 应包含 ${status}`);
+  }
+});
+
+test('排序使用 Bases 的 sort 结构', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  assert.ok(text.includes('sort:'));
+  assert.ok(text.includes('property: 评分'));
+  assert.ok(text.includes('direction: DESC'));
+});
+
+test('不再依赖 Dataview', () => {
+  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+  assert.strictEqual((text.match(/dataview/g) || []).length, 0, '不应出现 dataview');
+});
+
+console.log('书架落地页');
+
+test('落地页嵌入看板并写维护说明', () => {
+  const text = shelfNoteTemplate({ notesRoot: '20 笔记', date: '2026-11-26' });
+  assertFrontmatterClosed(text, '书架落地页');
+  assert.ok(text.includes('笔记类型: 索引'));
+  assert.ok(text.includes('![[00 书架]]'), '应嵌入看板本体');
+  assert.ok(text.includes('新建书籍卡'));
+  assertValidTags(parseTags(text), '书架落地页');
 });
 
 console.log('YAML 与时间');
