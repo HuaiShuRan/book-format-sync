@@ -31,6 +31,7 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
 - **Shelf Base** (`20 笔记/书架.base` by default): an Obsidian Bases file with a cover gallery plus a table view, regenerated automatically from the configured card folder (Bases views query live, so no manual refresh command).
 - **EPUB cover**: when the book card's `封面` property points at a vault image, that image is written into the EPUB (`OEBPS/cover.*` plus OPF `cover-image`). TXT is plain text and cannot embed an image.
 - **Configurable ribbon**: the `书库` and `新建书籍卡` ribbon buttons can each be hidden in settings.
+- **Library scaffold** (`布置书库目录结构`, off by default): when the book folder is empty, create the recommended structure (`00 收件箱`, book folders per title, card folder, reading-note folder, Base folder, `90 附件`) with a `_目录说明.md` in each new folder. When the book folder already has content, nothing is moved or overwritten — the plugin only writes `00 收件箱/书库结构建议.md` describing the structure and the migration options.
 
 ## Requirements
 

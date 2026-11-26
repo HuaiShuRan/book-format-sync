@@ -47,6 +47,14 @@ const {
   coverFileName,
   todayStamp,
 } = require('../lib/templates');
+const {
+  INBOX_DIR,
+  DIR_NOTE_FILE,
+  RECOMMENDATION_FILE,
+  dirNoteContent,
+  scaffoldPlan,
+  recommendationMarkdown,
+} = require('../lib/scaffold');
 
 const DEFAULT_SETTINGS = Object.freeze({
   bookRoot: '10 书籍',
@@ -62,13 +70,14 @@ const DEFAULT_SETTINGS = Object.freeze({
   bookProfiles: [],
   cardDir: '20 笔记/书目',
   readingNoteDir: '20 笔记/读书笔记',
-  shelfBasePath: '20 笔记/书架.base',
+  shelfBasePath: DEFAULT_SHELF_BASE,
   autoShelf: true,
   ribbonLibrary: true,
   ribbonNewCard: true,
   autoRenameCover: true,
   cardSize: 220,
   cardAspectRatio: 0.72,
+  allowScaffold: false,
   settingsVersion: 2,
 });
 
@@ -194,6 +203,12 @@ class BookFormatSyncPlugin extends Plugin {
         if (!checking) void this.renameActiveCover(file);
         return true;
       },
+    });
+
+    this.addCommand({
+      id: 'scaffold-library',
+      name: '布置书库目录结构',
+      callback: () => { void this.scaffoldLibrary(); },
     });
 
     this.addSettingTab(new BookFormatSettingTab(this.app, this));
@@ -1209,6 +1224,92 @@ class BookFormatSyncPlugin extends Plugin {
     }
   }
 
+  /** 目录是否不存在或为空。 */
+  async isFolderEmpty(folderPath) {
+    const path = String(folderPath || '').replace(/^\/+|\/+$/g, '');
+    if (!path) return true;
+    if (!(await this.exists(path))) return true;
+    try {
+      const listing = await this.adapter.list(path);
+      return (listing.files || []).length === 0 && (listing.folders || []).length === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * 布置书库目录结构。
+   * - 默认关闭，需在设置里开启「允许布置书库结构」
+   * - 只在用户主动触发时执行，加载时绝不自动运行
+   * - 书库目录为空：创建推荐结构 + 目录说明文件，再重写书架 Base
+   * - 书库目录已有内容：不改动任何文件，只生成一份结构建议
+   */
+  async scaffoldLibrary() {
+    if (this.settings.allowScaffold !== true) {
+      new Notice('请先在「设置 → 书库」开启「允许布置书库结构」。', 8000);
+      return false;
+    }
+
+    const plan = scaffoldPlan({
+      bookRoot: this.settings.bookRoot,
+      cardDir: this.settings.cardDir,
+      readingNoteDir: this.settings.readingNoteDir,
+      shelfBasePath: this.settings.shelfBasePath,
+    });
+    const empty = await this.isFolderEmpty(this.rootPath);
+
+    if (!empty) {
+      const target = posixJoin(INBOX_DIR, RECOMMENDATION_FILE);
+      if (await this.exists(target)) {
+        new Notice(`书库已有内容，未做任何改动；建议文件已存在：${target}`, 7000);
+        await this.app.workspace.openLinkText(target, '', false);
+        return false;
+      }
+      const ok = await this.askConfirm('书库已有内容', [
+        '不会移动、不会删除、不会覆盖任何现有文件。',
+        `只会在「${INBOX_DIR}」生成一份结构建议，供你对照调整。`,
+        '确定生成吗？',
+      ]);
+      if (!ok) return false;
+      await this.ensureFolder(INBOX_DIR);
+      await this.adapter.write(target, recommendationMarkdown({
+        bookRoot: this.settings.bookRoot,
+        cardDir: this.settings.cardDir,
+        readingNoteDir: this.settings.readingNoteDir,
+        shelfBasePath: this.settings.shelfBasePath,
+        date: todayStamp(),
+      }));
+      new Notice(`已生成结构建议：${target}`, 6000);
+      await this.app.workspace.openLinkText(target, '', false);
+      return true;
+    }
+
+    const preview = plan.dirs.map((dir) => `· ${dir.path}`).join('\n');
+    const ok = await this.askConfirm('布置书库目录结构', [
+      '将创建以下目录（已存在的会跳过）：',
+      preview,
+      '每个目录会放一份「_目录说明.md」，已存在的文件不会被覆盖。',
+      '确定继续吗？',
+    ]);
+    if (!ok) return false;
+
+    let created = 0;
+    for (const dir of plan.dirs) {
+      if (!(await this.exists(dir.path))) {
+        await this.ensureFolder(dir.path);
+        created += 1;
+      }
+      const notePath = posixJoin(dir.path, DIR_NOTE_FILE);
+      if (!(await this.exists(notePath))) {
+        await this.adapter.write(notePath, dirNoteContent(dir.path, dir.desc));
+      }
+    }
+
+    await this.refreshShelfBase(true);
+    new Notice(`已布置 ${created} 个目录，并更新书架 Base。`, 7000);
+    return true;
+  }
+
   get cardDir() {
     return normalizeVaultRelativePath(this.settings.cardDir || DEFAULT_CARD_DIR, '书籍卡片目录');
   }
@@ -1949,6 +2050,27 @@ class BookFormatSettingTab extends PluginSettingTab {
         await this.plugin.refreshShelfBase();
       },
     });
+
+    containerEl.createEl('h3', { text: '书库结构' });
+
+    new Setting(containerEl)
+      .setName('允许布置书库结构')
+      .setDesc('默认关闭。开启后可用命令「布置书库目录结构」或下方按钮一键创建推荐目录。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.allowScaffold === true)
+        .onChange(async (value) => {
+          this.plugin.settings.allowScaffold = Boolean(value);
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('布置书库')
+      .setDesc('书库目录为空时创建推荐结构；已有内容时只生成一份结构建议，不改动任何文件。')
+      .addButton((button) => button
+        .setButtonText('布置书库')
+        .onClick(() => {
+          void this.plugin.scaffoldLibrary();
+        }));
 
     new Setting(containerEl)
       .setName('自动维护书架 Base')

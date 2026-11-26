@@ -5,6 +5,23 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-11-27
+
+### Added
+
+- 新命令「布置书库目录结构」与设置项「允许布置书库结构」（**默认关闭**）：一键创建推荐目录（`00 收件箱` / 书库目录 / 卡片目录 / 读书笔记目录 / Base 所在目录 / `90 附件`），并在每个目录写入 `_目录说明.md`，让 Obsidian 能显示空目录。
+- 书库目录**已有内容**时不做任何改动，只在 `00 收件箱/书库结构建议.md` 生成一份对照建议（推荐结构、取舍理由、三种迁移走法）。
+- 仅在用户主动触发（命令或设置页按钮）时执行，插件加载不会自动运行。
+
+### Changed
+
+- 默认书架 Base 路径由 `20 笔记/书架.base` 改为 `90 书架/书架.base`（已保存的旧值不受影响，仍按你的设置走）。
+
+### Notes
+
+- 幂等：已存在的目录跳过、已存在的文件不覆盖、重复执行无副作用。
+- 生成完成后自动重写书架 Base。
+
 ## [1.6.0] - 2026-11-26
 
 ### Changed

@@ -1659,6 +1659,162 @@ module.exports = {
 };
 
 },
+"lib/scaffold.js": function (module, exports, __require, require) {
+'use strict';
+
+/**
+ * 书库目录结构（脚手架）：只计算目录清单与说明文案，不做任何 IO。
+ *
+ * 结构（方案 A：按类型分层 + 每本书一个目录）：
+ *   00 收件箱/            临时落地
+ *   <书库目录>/<书名>/     三格式 + 封面（一本书一个目录）
+ *   <卡片目录>/            书籍卡（书架 Base 的数据源）
+ *   <读书笔记目录>/        读书笔记
+ *   <Base 所在目录>/       书架 Base
+ *   90 附件/              跨书共享附件
+ */
+
+const { normalizeDir, normalizeShelfBase } = __require("lib/templates.js");
+
+const INBOX_DIR = '00 收件箱';
+const SHARED_ATTACH_DIR = '90 附件';
+const DIR_NOTE_FILE = '_目录说明.md';
+const RECOMMENDATION_FILE = '书库结构建议.md';
+
+function posixDirname(value) {
+  const text = String(value == null ? '' : value).replace(/\\/g, '/');
+  const index = text.lastIndexOf('/');
+  return index < 0 ? '' : text.slice(0, index);
+}
+
+/** 目录说明文件内容。 */
+function dirNoteContent(path, desc) {
+  return [
+    `# 目录说明：${path}`,
+    '',
+    desc || '（填写：这个目录放什么）',
+    '',
+    '> 本文件由「书库」插件生成，用于让 Obsidian 显示空目录；可以删除。',
+    '',
+  ].join('\n');
+}
+
+/**
+ * 计算需要创建的目录清单。
+ * 返回 { dirs: [{path, desc}], basePath }，已去重、已剔除空路径。
+ */
+function scaffoldPlan(options) {
+  const opts = options || {};
+  const bookRoot = normalizeDir(opts.bookRoot, '10 书籍');
+  const cardDir = normalizeDir(opts.cardDir, '20 笔记/书目');
+  const readingDir = normalizeDir(opts.readingNoteDir, '20 笔记/读书笔记');
+  const basePath = normalizeShelfBase(opts.shelfBasePath, '90 书架/书架.base');
+  const baseDir = posixDirname(basePath);
+
+  const candidates = [
+    { path: INBOX_DIR, desc: '临时落地：还没归类的书、导入的原始文件。' },
+    { path: bookRoot, desc: '三格式产物的家。一本书一个目录，含 md / txt / epub 与封面。' },
+    { path: cardDir, desc: '书籍卡：一本书一张卡，书架 Base 的数据源。' },
+    { path: readingDir, desc: '读书笔记：需要深挖的书才建。' },
+    { path: baseDir, desc: '索引与看板：书架 Base 存放在这里。' },
+    { path: SHARED_ATTACH_DIR, desc: '跨书共享的附件：图例、插图、模板截图。' },
+  ];
+
+  const seen = new Set();
+  const dirs = [];
+  for (const item of candidates) {
+    const path = String(item.path || '').replace(/^\/+|\/+$/g, '');
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    dirs.push({ path, desc: item.desc });
+  }
+
+  return { dirs, basePath };
+}
+
+/** 书库已有内容时生成的建议文档。 */
+function recommendationMarkdown(options) {
+  const opts = options || {};
+  const bookRoot = normalizeDir(opts.bookRoot, '10 书籍');
+  const cardDir = normalizeDir(opts.cardDir, '20 笔记/书目');
+  const readingDir = normalizeDir(opts.readingNoteDir, '20 笔记/读书笔记');
+  const basePath = normalizeShelfBase(opts.shelfBasePath, '90 书架/书架.base');
+  const stamp = opts.date || '';
+
+  return [
+    '---',
+    'aliases: []',
+    'tags:',
+    '  - 书库/结构建议',
+    '笔记类型: 参考手册',
+    stamp ? `更新日期: ${stamp}` : '更新日期: ',
+    '---',
+    '',
+    '# 书库结构建议',
+    '',
+    '> [!info] 为什么有这份文件',
+    '> 书库目录里已经有内容了，插件**没有改动任何文件**。这份文件只解释推荐结构，是否调整由你自己决定。',
+    '',
+    '## 推荐结构',
+    '',
+    '```text',
+    `${INBOX_DIR}/                临时落地：还没归类的书、导入的原始文件`,
+    `${bookRoot}/`,
+    `└── 《书名》/`,
+    '    ├── 《书名》.md',
+    '    ├── 《书名》.txt',
+    '    ├── 《书名》.epub',
+    '    └── 封面.png             封面随书走',
+    `${cardDir}/                 书籍卡（书架 Base 的唯一数据源）`,
+    `${readingDir}/              读书笔记`,
+    `${posixDirname(basePath)}/                 书架 Base`,
+    `${SHARED_ATTACH_DIR}/                跨书共享的附件：图例、插图、截图`,
+    '```',
+    '',
+    '## 为什么这样分',
+    '',
+    '| 决策 | 选择 | 理由 |',
+    '|---|---|---|',
+    '| 按书建目录还是按格式分层 | 按书 | 一本书的三格式是一个整体，备份、迁移、删除都是"一个目录"的事 |',
+    '| 附件集中还是按书分散 | 封面随书、其它共享附件集中 | 封面只服务这一本书；图例、插图跨书复用 |',
+    '| 层级深度 | 最多 3 层 | 再深就只能靠记忆找路径 |',
+    '| 卡片放哪 | 单个卡片目录 | 书架 Base 只需要一条 `file.inFolder(...)`；卡片散落会让过滤条件随书增加 |',
+    '',
+    '## 当前设置对照',
+    '',
+    '| 设置项 | 当前值 |',
+    '|---|---|',
+    `| 书库目录 | \`${bookRoot}\` |`,
+    `| 书籍卡片目录 | \`${cardDir}\` |`,
+    `| 读书笔记目录 | \`${readingDir}\` |`,
+    `| 书架 Base 文件 | \`${basePath}\` |`,
+    '',
+    '## 想换成推荐结构时的三种走法',
+    '',
+    '1. **手动搬家（最干净）**：把旧书移入 `' + bookRoot + '/<书名>/`，再把「书库目录」改成该路径。',
+    '2. **零移动**：保留现有目录，用设置里的「每本书路径组」把旧路径登记进去，面板仍能识别。',
+    '3. **渐进**：旧书不动，新书按推荐结构走。',
+    '',
+    '> [!tip] 自动布置',
+    '> 只有「书库目录」为空时，插件才能一键布置目录结构。你现在已有内容，所以这里只给建议。',
+    '',
+    '%% 本文件由「书库」插件生成，可自由修改或删除。 %%',
+    '',
+  ].join('\n');
+}
+
+module.exports = {
+  INBOX_DIR,
+  SHARED_ATTACH_DIR,
+  DIR_NOTE_FILE,
+  RECOMMENDATION_FILE,
+  posixDirname,
+  dirNoteContent,
+  scaffoldPlan,
+  recommendationMarkdown,
+};
+
+},
 "lib/templates.js": function (module, exports, __require, require) {
 'use strict';
 
@@ -1676,7 +1832,7 @@ const { sanitizeFileName } = __require("lib/text.js");
 
 const DEFAULT_CARD_DIR = '20 笔记/书目';
 const DEFAULT_READING_DIR = '20 笔记/读书笔记';
-const DEFAULT_SHELF_BASE = '20 笔记/书架.base';
+const DEFAULT_SHELF_BASE = '90 书架/书架.base';
 
 function pad2(value) {
   return String(value).padStart(2, '0');
@@ -2687,6 +2843,14 @@ const {
   coverFileName,
   todayStamp,
 } = __require("lib/templates.js");
+const {
+  INBOX_DIR,
+  DIR_NOTE_FILE,
+  RECOMMENDATION_FILE,
+  dirNoteContent,
+  scaffoldPlan,
+  recommendationMarkdown,
+} = __require("lib/scaffold.js");
 
 const DEFAULT_SETTINGS = Object.freeze({
   bookRoot: '10 书籍',
@@ -2702,13 +2866,14 @@ const DEFAULT_SETTINGS = Object.freeze({
   bookProfiles: [],
   cardDir: '20 笔记/书目',
   readingNoteDir: '20 笔记/读书笔记',
-  shelfBasePath: '20 笔记/书架.base',
+  shelfBasePath: DEFAULT_SHELF_BASE,
   autoShelf: true,
   ribbonLibrary: true,
   ribbonNewCard: true,
   autoRenameCover: true,
   cardSize: 220,
   cardAspectRatio: 0.72,
+  allowScaffold: false,
   settingsVersion: 2,
 });
 
@@ -2834,6 +2999,12 @@ class BookFormatSyncPlugin extends Plugin {
         if (!checking) void this.renameActiveCover(file);
         return true;
       },
+    });
+
+    this.addCommand({
+      id: 'scaffold-library',
+      name: '布置书库目录结构',
+      callback: () => { void this.scaffoldLibrary(); },
     });
 
     this.addSettingTab(new BookFormatSettingTab(this.app, this));
@@ -3849,6 +4020,92 @@ class BookFormatSyncPlugin extends Plugin {
     }
   }
 
+  /** 目录是否不存在或为空。 */
+  async isFolderEmpty(folderPath) {
+    const path = String(folderPath || '').replace(/^\/+|\/+$/g, '');
+    if (!path) return true;
+    if (!(await this.exists(path))) return true;
+    try {
+      const listing = await this.adapter.list(path);
+      return (listing.files || []).length === 0 && (listing.folders || []).length === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * 布置书库目录结构。
+   * - 默认关闭，需在设置里开启「允许布置书库结构」
+   * - 只在用户主动触发时执行，加载时绝不自动运行
+   * - 书库目录为空：创建推荐结构 + 目录说明文件，再重写书架 Base
+   * - 书库目录已有内容：不改动任何文件，只生成一份结构建议
+   */
+  async scaffoldLibrary() {
+    if (this.settings.allowScaffold !== true) {
+      new Notice('请先在「设置 → 书库」开启「允许布置书库结构」。', 8000);
+      return false;
+    }
+
+    const plan = scaffoldPlan({
+      bookRoot: this.settings.bookRoot,
+      cardDir: this.settings.cardDir,
+      readingNoteDir: this.settings.readingNoteDir,
+      shelfBasePath: this.settings.shelfBasePath,
+    });
+    const empty = await this.isFolderEmpty(this.rootPath);
+
+    if (!empty) {
+      const target = posixJoin(INBOX_DIR, RECOMMENDATION_FILE);
+      if (await this.exists(target)) {
+        new Notice(`书库已有内容，未做任何改动；建议文件已存在：${target}`, 7000);
+        await this.app.workspace.openLinkText(target, '', false);
+        return false;
+      }
+      const ok = await this.askConfirm('书库已有内容', [
+        '不会移动、不会删除、不会覆盖任何现有文件。',
+        `只会在「${INBOX_DIR}」生成一份结构建议，供你对照调整。`,
+        '确定生成吗？',
+      ]);
+      if (!ok) return false;
+      await this.ensureFolder(INBOX_DIR);
+      await this.adapter.write(target, recommendationMarkdown({
+        bookRoot: this.settings.bookRoot,
+        cardDir: this.settings.cardDir,
+        readingNoteDir: this.settings.readingNoteDir,
+        shelfBasePath: this.settings.shelfBasePath,
+        date: todayStamp(),
+      }));
+      new Notice(`已生成结构建议：${target}`, 6000);
+      await this.app.workspace.openLinkText(target, '', false);
+      return true;
+    }
+
+    const preview = plan.dirs.map((dir) => `· ${dir.path}`).join('\n');
+    const ok = await this.askConfirm('布置书库目录结构', [
+      '将创建以下目录（已存在的会跳过）：',
+      preview,
+      '每个目录会放一份「_目录说明.md」，已存在的文件不会被覆盖。',
+      '确定继续吗？',
+    ]);
+    if (!ok) return false;
+
+    let created = 0;
+    for (const dir of plan.dirs) {
+      if (!(await this.exists(dir.path))) {
+        await this.ensureFolder(dir.path);
+        created += 1;
+      }
+      const notePath = posixJoin(dir.path, DIR_NOTE_FILE);
+      if (!(await this.exists(notePath))) {
+        await this.adapter.write(notePath, dirNoteContent(dir.path, dir.desc));
+      }
+    }
+
+    await this.refreshShelfBase(true);
+    new Notice(`已布置 ${created} 个目录，并更新书架 Base。`, 7000);
+    return true;
+  }
+
   get cardDir() {
     return normalizeVaultRelativePath(this.settings.cardDir || DEFAULT_CARD_DIR, '书籍卡片目录');
   }
@@ -4589,6 +4846,27 @@ class BookFormatSettingTab extends PluginSettingTab {
         await this.plugin.refreshShelfBase();
       },
     });
+
+    containerEl.createEl('h3', { text: '书库结构' });
+
+    new Setting(containerEl)
+      .setName('允许布置书库结构')
+      .setDesc('默认关闭。开启后可用命令「布置书库目录结构」或下方按钮一键创建推荐目录。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.allowScaffold === true)
+        .onChange(async (value) => {
+          this.plugin.settings.allowScaffold = Boolean(value);
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('布置书库')
+      .setDesc('书库目录为空时创建推荐结构；已有内容时只生成一份结构建议，不改动任何文件。')
+      .addButton((button) => button
+        .setButtonText('布置书库')
+        .onClick(() => {
+          void this.plugin.scaffoldLibrary();
+        }));
 
     new Setting(containerEl)
       .setName('自动维护书架 Base')

@@ -25,6 +25,7 @@ const {
 const { buildEpub } = require('../lib/epub');
 const { readZip } = require('../lib/zip');
 const { normalizeBookProfile, migrateSettings, validateProfilePaths } = require('../lib/paths');
+const { scaffoldPlan, dirNoteContent, recommendationMarkdown } = require('../lib/scaffold');
 
 let passed = 0;
 
@@ -318,6 +319,60 @@ test('cardDir 参与路径校验', () => {
   assert.throws(() => validateProfilePaths({ bookName: '某书', cardDir: 'C:/abs' }), /绝对路径/);
   assert.throws(() => validateProfilePaths({ bookName: '某书', cardDir: '../out' }), /\.\./);
   assert.doesNotThrow(() => validateProfilePaths({ bookName: '某书', cardDir: '20 笔记/某书卡' }));
+});
+
+console.log('书库结构（脚手架）');
+
+test('默认配置生成推荐的六类目录', () => {
+  const plan = scaffoldPlan({});
+  const paths = plan.dirs.map((dir) => dir.path);
+  assert.deepStrictEqual(paths, [
+    '00 收件箱',
+    '10 书籍',
+    '20 笔记/书目',
+    '20 笔记/读书笔记',
+    '90 书架',
+    '90 附件',
+  ]);
+  assert.strictEqual(plan.basePath, '90 书架/书架.base');
+});
+
+test('目录清单跟随设置并去重', () => {
+  const plan = scaffoldPlan({
+    bookRoot: '10 书籍',
+    cardDir: '10 书籍/卡片',
+    readingNoteDir: '10 书籍/卡片',
+    shelfBasePath: '90 书架/书架',
+  });
+  const paths = plan.dirs.map((dir) => dir.path);
+  assert.strictEqual(new Set(paths).size, paths.length, '不应出现重复目录');
+  assert.ok(paths.includes('10 书籍/卡片'));
+  assert.ok(paths.includes('90 书架'));
+});
+
+test('每个目录都有说明文案', () => {
+  const plan = scaffoldPlan({});
+  for (const dir of plan.dirs) {
+    assert.ok(dir.desc && dir.desc.length > 4, `${dir.path} 缺少说明`);
+  }
+});
+
+test('目录说明文件可生成且标注可删', () => {
+  const text = dirNoteContent('10 书籍', '三格式产物的家。');
+  assert.ok(text.includes('# 目录说明：10 书籍'));
+  assert.ok(text.includes('三格式产物的家。'));
+  assert.ok(text.includes('可以删除'));
+});
+
+test('已有内容时的建议文档包含结构与三种走法', () => {
+  const text = recommendationMarkdown({ date: '2026-11-27' });
+  assert.ok(text.startsWith('---\n'));
+  assert.ok(text.includes('书库结构建议'));
+  assert.ok(text.includes('没有改动任何文件'), '应说明未改动现有文件');
+  assert.ok(text.includes('手动搬家'));
+  assert.ok(text.includes('零移动'));
+  assert.ok(text.includes('渐进'));
+  assert.ok(text.includes('更新日期: 2026-11-27'));
 });
 
 console.log('YAML 与时间');

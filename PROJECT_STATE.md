@@ -153,8 +153,9 @@ node tools/build.js
   "maxTitleChars": 10,
   "cardDir": "20 笔记/书目",
   "readingNoteDir": "20 笔记/读书笔记",
-  "shelfBasePath": "20 笔记/书架.base",
+  "shelfBasePath": "90 书架/书架.base",
   "autoShelf": true,
+  "allowScaffold": false,
   "ribbonLibrary": true,
   "ribbonNewCard": true,
   "autoRenameCover": true,
@@ -194,6 +195,8 @@ node tools/build.js
 规范化书库全部书籍
 新建书籍卡
 新建读书笔记
+按规则重命名当前书籍封面文件
+布置书库目录结构
 ```
 
 功能区（左侧图标，可在设置里逐个开关）：
