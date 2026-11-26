@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.7.4] - 2026-11-27
+
+### Changed
+
+- GitHub 仓库由 `book-format-sync` 改名为 **`book-library`**，与插件 id 保持一致；旧地址会自动重定向，本地 remote 与文档链接已同步。
+
 ## [1.7.3] - 2026-11-27
 
 ### Changed
