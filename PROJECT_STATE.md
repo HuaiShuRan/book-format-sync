@@ -1,9 +1,9 @@
 # book-format-sync — 项目状态与交接摘要
 
 > 最后整理：2026-11-23  
-> 当前版本：`1.3.9`  
+> 当前版本：`1.4.0`  
 > 仓库：<https://github.com/HuaiShuRan/book-format-sync>  
-> 最新 Release：<https://github.com/HuaiShuRan/book-format-sync/releases/tag/v1.3.9>
+> 最新 Release：<https://github.com/HuaiShuRan/book-format-sync/releases/tag/v1.3.9>（`v1.4.0` 尚未发布）
 
 这份文件用于换电脑、重新 clone 或交给另一个 AI 时快速接手。先读本文件，再读 `README.md` 和 `AGENTS.md`。
 
@@ -109,6 +109,7 @@ lib/epub.js         EPUB 解析/生成
 lib/zip.js          零依赖 ZIP 读写
 lib/titles.js       标题缺失检测、本地标题建议、缓存键
 lib/paths.js        vault 相对路径校验、旧设置迁移、按书输出目录
+lib/templates.js    书籍卡 / 读书笔记 / 书架看板模板（纯函数，只产出字符串）
 styles.css          阅读视图/实时预览缩进、属性行隐藏、插件 UI 样式
 tools/build.js      零依赖打包器，生成 main.js
 tools/cli.js        命令行转换器
@@ -183,7 +184,20 @@ node tools/build.js
 只规范化当前文件
 从当前文件转换生成另外两种格式
 规范化书库全部书籍
+新建书籍卡
+新建读书笔记
+生成书架看板
 ```
+
+新命令的输出位置（v1.4.0）：
+
+| 命令 | 生成位置 |
+|---|---|
+| 新建书籍卡 | `<笔记目录>/书目/<书名>.md` |
+| 新建读书笔记 | `<笔记目录>/读书笔记/<书名>.md` |
+| 生成书架看板 | `<笔记目录>/00 书架.md` |
+
+`<笔记目录>` 由设置项「笔记目录」决定，默认 `20 笔记`。书籍卡与读书笔记已存在时只打开、不覆盖；书架看板已存在时先确认再覆盖。
 
 文件列表右键：
 
@@ -208,15 +222,17 @@ node tests/run-tests.js
 node tests/plugin-harness.js
 node tests/title-apply-harness.js
 node tests/menu-harness.js
+node tests/library-harness.js
 ```
 
-当前基线（v1.3.9）：
+当前基线（v1.4.0）：
 
 ```text
 run-tests: 31 tests passed
 plugin-harness: ok
 title-apply-harness: ok
 menu-harness: ok
+library-harness: 18 tests passed
 ```
 
 测试覆盖重点：
@@ -258,9 +274,9 @@ menu-harness: ok
 当前 Release：
 
 ```text
-v1.3.9
+v1.3.9（线上最新）
+v1.4.0（本地已就绪，待打 tag 发布）
 ```
-
 文档-only 改动不需要发 Release；用户可见功能/修复按仓库习惯升 patch/minor 版本。
 
 ---
@@ -303,6 +319,8 @@ styles.css
 - 标题建议对“同章节行正文”的书可能生成与正文首句重复的标题；应用标题前应确认是否要移出首句。
 - EPUB 解析不支持 ZIP64/加密/分卷；EPUB 图片在纯文本格式中变成 `[图片]`。
 - 章节号缺失/重复只报告，不自动补号或重排。
+- 书架看板的表格依赖社区插件 Dataview；未安装时只是普通代码块，不报错也不显示表格。
+- 书籍卡与读书笔记写在「笔记目录」下，与书库目录（三格式文件）分离，避免被规范化改写。
 
 ### 建议下一步
 
@@ -350,3 +368,4 @@ styles.css
 | 1.3.7 | 章节序号一律不补零 |
 | 1.3.8 | 短感叹号标题不被误判为正文 |
 | 1.3.9 | 插件样式仅隐藏属性面板中的 cssclasses 行 |
+| 1.4.0 | 书库内容框架：书籍卡/读书笔记/书架看板三命令、面板工具栏、笔记目录设置、`lib/templates.js`、`docs/LIBRARY-PLAN.md` |

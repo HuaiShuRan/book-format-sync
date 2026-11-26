@@ -38,6 +38,9 @@ jobs:
       - name: Menu harness
         run: node tests/menu-harness.js
 
+      - name: Library harness
+        run: node tests/library-harness.js
+
       - name: Validate manifest version against tag
         run: |
           node - <<'NODE'

@@ -215,3 +215,16 @@
   line-height: 1.5;
   word-break: break-word;
 }
+
+/* v1.4 书库面板工具栏与书名输入框 */
+.bfs-toolbar {
+  justify-content: flex-start;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.bfs-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 6px 0 2px;
+}

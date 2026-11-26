@@ -5,6 +5,23 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-11-26
+
+### Added
+
+- 书库内容框架：新增 `lib/templates.js`，内置书籍卡、读书笔记、书架看板三份模板。模板只生成一次，生成后与插件脱钩，用户可自由修改。
+- 新命令：`新建书籍卡`、`新建读书笔记`、`生成书架看板`。书籍卡写入「笔记目录/书目」，读书笔记写入「笔记目录/读书笔记」，书架看板写入「笔记目录/00 书架.md」。
+- 书库面板新增工具栏（新建书籍卡 / 生成书架看板），并为每本书增加书籍卡入口：未创建时显示「新建书籍卡」，已存在时显示「打开书籍卡」。
+- 设置页新增「笔记目录」，默认 `20 笔记`，用于存放上述三类文件。
+- 新增 `tests/library-harness.js`（18 项）：模板内容、标签合法性、路径计算与 YAML 转义。
+- 新增 `docs/LIBRARY-PLAN.md`：图书馆化分期计划（v1.4 骨架 / v1.5 阅读 / v1.6 元数据）与范围界定。
+
+### Notes
+
+- 明确不做：内置书籍下载、AI 生成内容、PDF → 文本转换、移动端支持。
+- 书籍卡不写 `cssclasses: book-format-sync`，避免继承正文首行缩进。
+- 新建书籍卡/读书笔记时，若文件已存在则只打开、不覆盖。
+
 ## [1.3.9] - 2026-11-23
 
 ### Changed

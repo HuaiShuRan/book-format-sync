@@ -36,3 +36,6 @@ jobs:
 
       - name: Menu harness
         run: node tests/menu-harness.js
+
+      - name: Library harness
+        run: node tests/library-harness.js
