@@ -5,6 +5,22 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-11-26
+
+### Added
+
+- 新设置「书架卡片宽度（px）」「书架封面比例（宽/高）」：卡片视图的尺寸与封面宽高比可调，修改后自动重写 Base。
+- 新命令「按规则重命名当前书籍封面文件」：对已有书籍卡补做一次封面重命名，并把新文件名写回 `封面` 属性。
+
+### Changed
+
+- 状态栏只在该书属于「书库目录」内的 md/txt/epub 时显示「三格式 x/3」，其它文件不再占位。
+
+### Removed
+
+- 设置页移除「覆盖前备份」开关，改为**始终备份**到 `.book-format-sync/backups/`。
+- 设置页移除「扫描书库 / 打开面板」按钮（面板仍可从功能区图标或命令面板打开）。
+
 ## [1.4.2] - 2026-11-26
 
 ### Added

@@ -1849,6 +1849,10 @@ function readingNoteTemplate(options) {
 function shelfBoardTemplate(options) {
   const opts = options || {};
   const from = normalizeDir(opts.cardDir, DEFAULT_CARD_DIR);
+  const sizeRaw = Number(opts.cardSize);
+  const cardSize = Number.isFinite(sizeRaw) && sizeRaw >= 80 ? Math.round(sizeRaw) : 220;
+  const ratioRaw = Number(opts.cardAspectRatio);
+  const aspectRatio = Number.isFinite(ratioRaw) && ratioRaw > 0.2 && ratioRaw < 3 ? ratioRaw : 0.72;
   const lines = [];
 
   lines.push('# 书架 —— Obsidian Bases 文件；数据来自书籍卡目录，可直接编辑视图');
@@ -1865,8 +1869,8 @@ function shelfBoardTemplate(options) {
   lines.push('    name: 书架');
   lines.push('    image: 封面');
   lines.push('    imageFit: contain');
-  lines.push('    imageAspectRatio: 0.72');
-  lines.push('    cardSize: 220');
+  lines.push(`    imageAspectRatio: ${aspectRatio}`);
+  lines.push(`    cardSize: ${cardSize}`);
   lines.push('    order:');
   for (const col of ['file.name', '作者', '评分', '状态']) lines.push(`      - ${col}`);
   lines.push('    sort:');
@@ -2690,6 +2694,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   ribbonLibrary: true,
   ribbonNewCard: true,
   autoRenameCover: true,
+  cardSize: 220,
+  cardAspectRatio: 0.72,
   settingsVersion: 2,
 });
 
@@ -2805,6 +2811,16 @@ class BookFormatSyncPlugin extends Plugin {
       id: 'new-reading-note',
       name: '新建读书笔记',
       callback: () => this.newReadingNoteFlow(),
+    });
+    this.addCommand({
+      id: 'rename-cover-file',
+      name: '按规则重命名当前书籍封面文件',
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== 'md') return false;
+        if (!checking) void this.renameActiveCover(file);
+        return true;
+      },
     });
 
     this.addSettingTab(new BookFormatSettingTab(this.app, this));
@@ -2929,6 +2945,8 @@ class BookFormatSyncPlugin extends Plugin {
       this.settings.shelfBasePath = `${root}/书架.base`;
     }
     delete this.settings.notesRoot;
+    // 设置页已移除“覆盖前备份”开关，统一始终备份
+    this.settings.backup = true;
   }
 
   async saveSettings() {
@@ -3760,8 +3778,12 @@ class BookFormatSyncPlugin extends Plugin {
   async updateStatusBar() {
     if (!this.statusBar) return;
     const file = this.app.workspace.getActiveFile();
-    if (!file || !extOf(file.path)) {
-      this.statusBar.setText('三格式 —');
+    const ext = file ? extOf(file.path) : '';
+    const inBookRoot = Boolean(file) && (file.path === this.rootPath || file.path.startsWith(`${this.rootPath}/`));
+    if (!file || !ext || !inBookRoot) {
+      // 非书籍文件不占用状态栏
+      this.statusBar.setText('');
+      this.statusBar.title = '';
       return;
     }
     const group = await this.groupForFile(file.path).catch(() => null);
@@ -3778,6 +3800,40 @@ class BookFormatSyncPlugin extends Plugin {
 
   openLibrary() {
     new LibraryModal(this.app, this).open();
+  }
+
+  /** 对当前书籍卡执行一次封面重命名（命令入口）。 */
+  async renameActiveCover(file) {
+    try {
+      const text = await this.adapter.read(file.path);
+      const coverMatch = text.match(/^封面\s*:\s*(.+)$/m);
+      if (!coverMatch) {
+        new Notice('当前笔记没有「封面」属性。');
+        return false;
+      }
+      const raw = coverMatch[1].trim().replace(/^["']|["']$/g, '');
+      const linkText = raw.replace(/^!?\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
+      if (!linkText || /^https?:\/\//i.test(linkText)) {
+        new Notice('封面不是 vault 内图片，跳过。');
+        return false;
+      }
+      const titleMatch = text.match(/^#\s*《(.+?)》/m);
+      const bookName = titleMatch
+        ? titleMatch[1].trim()
+        : file.basename.replace(/^《|》$/g, '');
+      const authorMatch = text.match(/^作者\s*:\s*(.+)$/m);
+      const author = authorMatch ? authorMatch[1].trim().replace(/^["']|["']$/g, '') : '';
+      const renamed = await this.applyCoverNaming(bookName, author, linkText);
+      if (!renamed || renamed === linkText) {
+        return false;
+      }
+      const next = text.replace(coverMatch[0], `封面: "[[${renamed}]]"`);
+      await this.adapter.write(file.path, next);
+      return true;
+    } catch (error) {
+      new Notice(`重命名封面失败：${error.message}`, 8000);
+      return false;
+    }
   }
 
   get cardDir() {
@@ -3868,7 +3924,7 @@ class BookFormatSyncPlugin extends Plugin {
       return false;
     }
     if (!manual && this.settings.autoShelf === false) return false;
-    const content = shelfBoardTemplate({ cardDir: this.cardDir });
+    const content = shelfBoardTemplate({ cardDir: this.cardDir, cardSize: this.settings.cardSize, cardAspectRatio: this.settings.cardAspectRatio });
     let existing = null;
     if (await this.exists(target)) {
       try {
@@ -4503,6 +4559,32 @@ class BookFormatSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
+      .setName('书架卡片宽度（px）')
+      .setDesc('卡片视图里每张卡片的宽度，默认 220。')
+      .addText((text) => text
+        .setPlaceholder('220')
+        .setValue(String(this.plugin.settings.cardSize || 220))
+        .onChange(async (value) => {
+          const size = Number(value);
+          this.plugin.settings.cardSize = Number.isFinite(size) && size >= 80 ? Math.round(size) : 220;
+          await this.plugin.saveSettings();
+          await this.plugin.refreshShelfBase();
+        }));
+
+    new Setting(containerEl)
+      .setName('书架封面比例（宽/高）')
+      .setDesc('封面图宽高比，默认 0.72（竖版书封）。0.75 约等于 3:4。')
+      .addText((text) => text
+        .setPlaceholder('0.72')
+        .setValue(String(this.plugin.settings.cardAspectRatio || 0.72))
+        .onChange(async (value) => {
+          const ratio = Number(value);
+          this.plugin.settings.cardAspectRatio = Number.isFinite(ratio) && ratio > 0.2 && ratio < 3 ? ratio : 0.72;
+          await this.plugin.saveSettings();
+          await this.plugin.refreshShelfBase();
+        }));
+
+    new Setting(containerEl)
       .setName('功能区：书库按钮')
       .setDesc('在左侧功能区显示「书库」按钮（打开书库面板）。')
       .addToggle((toggle) => toggle
@@ -4708,15 +4790,10 @@ class BookFormatSettingTab extends PluginSettingTab {
         }));
 
     containerEl.createEl('h3', { text: '写入与备份' });
-    new Setting(containerEl)
-      .setName('覆盖前备份')
-      .setDesc('备份到 .book-format-sync/backups/时间戳/书名/。')
-      .addToggle((toggle) => toggle
-        .setValue(Boolean(this.plugin.settings.backup))
-        .onChange(async (value) => {
-          this.plugin.settings.backup = value;
-          await this.plugin.saveSettings();
-        }));
+    containerEl.createEl('p', {
+      text: '覆盖前会自动备份到 .book-format-sync/backups/时间戳/书名/。',
+      cls: 'bfs-muted',
+    });
     new Setting(containerEl)
       .setName('转换时允许覆盖已有目标')
       .setDesc('关闭时只新建缺失文件；开启时覆盖并先备份。')
@@ -4747,15 +4824,7 @@ class BookFormatSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
-      .setName('扫描书库')
-      .setDesc('打开只读面板，查看每本书的 3 格式状态。')
-      .addButton((button) => button
-        .setButtonText('打开面板')
-        .setCta()
-        .onClick(() => {
-          this.plugin.openLibrary();
-        }));
+
   }
 }
 

@@ -260,6 +260,18 @@ test('封面用 png 时写入正确扩展名与类型', () => {
   assert.ok(zip.get('OEBPS/content.opf').toString('utf8').includes('media-type="image/png"'));
 });
 
+test('卡片尺寸与封面比例可配置', () => {
+  const text = shelfBoardTemplate({ cardSize: 300, cardAspectRatio: 0.75 });
+  assert.ok(text.includes('    cardSize: 300'));
+  assert.ok(text.includes('    imageAspectRatio: 0.75'));
+});
+
+test('非法尺寸与比例回退默认值', () => {
+  const text = shelfBoardTemplate({ cardSize: 'abc', cardAspectRatio: -1 });
+  assert.ok(text.includes('    cardSize: 220'));
+  assert.ok(text.includes('    imageAspectRatio: 0.72'));
+});
+
 console.log('封面命名');
 
 test('有作者时生成《书名》-作者封面.ext', () => {
