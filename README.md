@@ -23,15 +23,19 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
   - EPUB: `text-indent: 2em`
 - **Three-format conversion**: from `md`, `txt`, or `epub`, generate the other formats without modifying the source file.
 - **Local chapter title suggestions**: detect empty, numeric, placeholder, duplicated titles; generate suggestions from the first sentence/paragraph locally. No AI, no network, no API key.
-- **Clean properties UI**: in notes carrying `book-library`, the plugin hides only the `cssclasses` property row; the YAML field and other properties remain intact.
+- **Clean properties UI**: in notes carrying `cssclasses: book-format-sync`, the plugin hides only the `cssclasses` property row; the YAML field and other properties remain intact.
 - **Right-click menu** on `.md`, `.txt`, `.epub` in the file explorer.
 - **Safe writes**: validate and re-parse all three outputs before writing; back up existing targets under `.book-format-sync/backups/`.
 - **Title suggestion cache** under `.book-format-sync/titles/`; manually edited titles are not overwritten.
+- **Book cards** (`新建书籍卡`): pick a title, optional author and cover; the card lands in the configured card folder. The chosen cover image is renamed to `《书名》-作者封面.ext` when that option is enabled, and the picker searches vault images.
+- **Shelf Base** (`20 笔记/书架.base` by default): an Obsidian Bases file with a cover gallery plus a table view, regenerated automatically from the configured card folder (Bases views query live, so no manual refresh command).
+- **EPUB cover**: when the book card's `封面` property points at a vault image, that image is written into the EPUB (`OEBPS/cover.*` plus OPF `cover-image`). TXT is plain text and cannot embed an image.
+- **Configurable ribbon**: the `书库` and `新建书籍卡` ribbon buttons can each be hidden in settings.
 
 ## Requirements
 
 - Obsidian desktop (the plugin uses Node `zlib` and binary file access).
-- Obsidian `1.5.0` or later.
+- Obsidian `1.9.0` or later (Bases cards view is used for the shelf).
 - No runtime dependencies beyond Obsidian and Node built-ins.
 
 ## Installation

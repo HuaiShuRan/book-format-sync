@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.4.2] - 2026-11-26
+
+### Added
+
+- 所有路径类设置都加了「从 vault 目录中选择」按钮：书库目录、书籍卡片目录、读书笔记目录、书架 Base 文件位置；每本书的输出目录也由"仅右键"改为可见按钮 + 右键两种方式。
+
+### Fixed
+
+- 设置页标题、文件右键菜单标题仍显示旧名「书库三格式同步」，统一改为「书库」。
+- 新建书籍卡时封面重命名提前于"卡片是否已存在"的判断，可能出现建卡失败却已改动用户图片文件名；改为确认可建卡后再重命名。
+- 书库面板里每本书的「新建书籍卡」按钮会直接建卡、无法填封面与作者；改为打开预填书名的建卡弹窗。
+- README 里 `cssclasses` 说明与最低 Obsidian 版本（1.5.0 → 1.9.0）未随改名/改版更新。
+
 ## [1.4.1] - 2026-11-26
 
 ### Added

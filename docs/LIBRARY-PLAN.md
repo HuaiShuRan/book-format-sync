@@ -95,7 +95,7 @@
 |:--:|---|---|---|
 | T1 | `lib/library.js` | `scanLibrary(root)` 返回每本书的 `{name, mdDir, txtDir, epubDir, files, chapterCount, issues[]}`；纯只读，不写盘 | 单测覆盖：正常书、缺格式、空目录、路径越界 |
 | T2 | `lib/templates.js` | 三个模板函数 `bookCard()` / `readingNote()` / `shelfBoard()`，返回字符串；不依赖 Templater | 快照测试比对生成结果 |
-| T3 | `src/main.js` | 新命令：`新建书籍卡`、`新建读书笔记`、`生成书架看板` | 命令注册成功、生成文件内容正确 |
+| T3 | `src/main.js` | 新命令：`新建书籍卡`、`新建读书笔记`；书架 Base 自动维护 | 命令注册成功、生成文件内容正确 |
 | T4 | `src/panel.js` | `LibraryModal`：表格列出书籍 + 缺失格式 + 章节异常；单行操作（规范化 / 打开三格式） | harness 用 DOM stub 验证渲染与操作回调 |
 | T5 | `tests/library-harness.js` | 扫描 + 模板 + 面板三块 | `node tests/library-harness.js` 通过 |
 
@@ -233,7 +233,7 @@ cssclasses: book-format-sync
 
 ### 7.3 书架看板（Bases）
 
-生成 `00 书架.base`（Obsidian 内置 Bases，不依赖社区插件）+ `00 书架.md` 落地页（嵌入看板）。
+生成 `00 书架.base`（Obsidian 内置 Bases，不依赖社区插件）并在卡片目录变化时自动重写；不生成 `.md` 落地页。
 
 - 卡片视图：`image: 封面` 从书籍卡的 `封面` 属性取图，`imageFit` / `imageAspectRatio` / `cardSize` 控制外形
 - 看板视图：`type: kanban` + `groupBy: 状态` + `groupOrder` 固定列顺序（Notion 式看板）
@@ -320,7 +320,7 @@ D:\小米云盘\note\Book\.obsidian\plugins\book-library\
 | # | 问题 | 选项 | 默认 |
 |:--:|---|---|---|
 | Q1 | PDF 是否放弃文本转换 | A 放弃（本期）/ B 用 pdf.js（+1.5~2 MB）/ C 外部 `pdftotext`（不算 npm 依赖） | **A**（见附录 A） |
-| Q2 | 书架看板是否强依赖 Dataview | A 依赖并检测 / B 同时生成纯表格版兜底 | B |
+| Q2 | 书架 Base 视图组合 | A 仅卡片 / B 卡片 + 表格 | B（已按此实现） |
 | Q3 | 元数据源优先级 | Open Library / Google Books / 手动 CSV 导入 | Open Library 优先，Google Books 兜底 |
 | Q4 | 阅读进度存哪里 | A 书籍卡 frontmatter / B 独立 `library.json` | A（随笔记走，可同步） |
 

@@ -2876,7 +2876,7 @@ class BookFormatSyncPlugin extends Plugin {
     const ext = extOf(file.path);
     if (!ext) return;
     menu.addItem((item) => {
-      item.setTitle('书库三格式同步').setIcon('library');
+      item.setTitle('书库').setIcon('library');
       const submenu = item.setSubmenu();
       submenu.addItem((sub) => sub
         .setTitle('生成章节标题建议')
@@ -3801,10 +3801,6 @@ class BookFormatSyncPlugin extends Plugin {
       return false;
     }
     const authorText = String(author || '').trim();
-    let coverRef = String(cover || '').trim();
-    if (coverRef && this.settings.autoRenameCover !== false) {
-      coverRef = await this.applyCoverNaming(name, authorText, coverRef);
-    }
     let rel;
     try {
       rel = bookCardPath(this.cardDir, name);
@@ -3816,6 +3812,11 @@ class BookFormatSyncPlugin extends Plugin {
       new Notice(`书籍卡已存在，未覆盖：${rel}`, 8000);
       await this.app.workspace.openLinkText(rel, '', false);
       return false;
+    }
+    // 确认要新建之后再重命名封面，避免建卡失败却改了用户的图片文件名。
+    let coverRef = String(cover || '').trim();
+    if (coverRef && this.settings.autoRenameCover !== false) {
+      coverRef = await this.applyCoverNaming(name, authorText, coverRef);
     }
     const content = bookCardTemplate({ name, author: authorText, cover: coverRef, bookRoot: this.rootPath, date: todayStamp() });
     await this.ensureFolder(posixDirname(rel));
@@ -4198,7 +4199,7 @@ class BookNameModal extends Modal {
     this.heading = opts.heading || '新建书籍卡';
     this.showAuthor = opts.showAuthor !== false;
     this.showCover = opts.showCover !== false;
-    this.name = '';
+    this.name = String(opts.initialName || '');
     this.author = '';
     this.cover = '';
     this.submitted = false;
@@ -4214,6 +4215,7 @@ class BookNameModal extends Modal {
     this.contentEl.createEl('label', { text: '书名', cls: 'bfs-field-label' });
     const nameInput = this.contentEl.createEl('input', { type: 'text', cls: 'bfs-name-input' });
     nameInput.placeholder = '例如：道德经-老子';
+    nameInput.value = this.name;
     nameInput.addEventListener('input', () => { this.name = nameInput.value; });
 
     let authorInput = null;
@@ -4372,14 +4374,11 @@ class LibraryModal extends Modal {
         });
       } else {
         const makeCard = actions.createEl('button', { text: '新建书籍卡' });
-        makeCard.addEventListener('click', async () => {
-          makeCard.disabled = true;
-          try {
-            await this.plugin.createBookCard(group.name);
-          } finally {
-            makeCard.disabled = false;
+        makeCard.addEventListener('click', () => {
+          new BookNameModal(this.app, async (payload) => {
+            await this.plugin.createBookCard(payload.name, payload.author, payload.cover);
             this.render();
-          }
+          }, { initialName: group.name }).open();
         });
       }
       const normalize = actions.createEl('button', { text: '规范化三格式', cls: 'mod-cta' });
@@ -4416,57 +4415,81 @@ class BookFormatSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl('h2', { text: '书库三格式同步' });
+    containerEl.createEl('h2', { text: '书库' });
     containerEl.createEl('p', {
-      text: '只处理 txt、md、epub。章节名只识别“第N章”，规范未覆盖的标题保持原样并在报告中提示。',
+      text: '管理每本书的 txt、md、epub 三格式，并按书籍卡片目录维护 Bases 书架。右侧文件夹按钮可从 vault 现有目录中选择。',
       cls: 'bfs-muted',
     });
 
-    new Setting(containerEl)
-      .setName('书库目录')
-      .setDesc('相对 vault 根目录，例如 10 书籍。')
-      .addText((text) => text
-        .setPlaceholder('10 书籍')
-        .setValue(this.plugin.settings.bookRoot)
-        .onChange(async (value) => {
-          this.plugin.settings.bookRoot = value.trim() || '10 书籍';
-          await this.plugin.saveSettings();
+    const addPathSetting = ({ name, desc, placeholder, value, apply }) => {
+      const setting = new Setting(containerEl).setName(name).setDesc(desc);
+      let textControl = null;
+      setting.addText((text) => {
+        textControl = text;
+        text.setPlaceholder(placeholder)
+          .setValue(value)
+          .onChange(async (changed) => {
+            await apply(changed, false);
+          });
+      });
+      setting.addExtraButton((button) => button
+        .setIcon('folder')
+        .setTooltip('从 vault 目录中选择')
+        .onClick(() => {
+          this.plugin.pickOutputFolder((folderPath) => {
+            if (textControl) textControl.setValue(folderPath);
+            void apply(folderPath, true);
+          });
         }));
+    };
 
-    new Setting(containerEl)
-      .setName('书籍卡片目录')
-      .setDesc('一本书一个 .md 卡片，相对 vault 根目录。书架 Base 的数据源就是这里。')
-      .addText((text) => text
-        .setPlaceholder('20 笔记/书目')
-        .setValue(this.plugin.settings.cardDir || DEFAULT_CARD_DIR)
-        .onChange(async (value) => {
-          this.plugin.settings.cardDir = value.trim() || DEFAULT_CARD_DIR;
-          await this.plugin.saveSettings();
-          await this.plugin.refreshShelfBase();
-        }));
+    addPathSetting({
+      name: '书库目录',
+      desc: '三格式文件所在目录，相对 vault 根目录。',
+      placeholder: '10 书籍',
+      value: this.plugin.settings.bookRoot,
+      apply: async (changed) => {
+        this.plugin.settings.bookRoot = String(changed || '').trim() || '10 书籍';
+        await this.plugin.saveSettings();
+      },
+    });
 
-    new Setting(containerEl)
-      .setName('读书笔记目录')
-      .setDesc('「新建读书笔记」的写入位置，相对 vault 根目录。')
-      .addText((text) => text
-        .setPlaceholder('20 笔记/读书笔记')
-        .setValue(this.plugin.settings.readingNoteDir || DEFAULT_READING_DIR)
-        .onChange(async (value) => {
-          this.plugin.settings.readingNoteDir = value.trim() || DEFAULT_READING_DIR;
-          await this.plugin.saveSettings();
-        }));
+    addPathSetting({
+      name: '书籍卡片目录',
+      desc: '一本书一个 .md 卡片；书架 Base 的数据源就是这里。',
+      placeholder: DEFAULT_CARD_DIR,
+      value: this.plugin.settings.cardDir || DEFAULT_CARD_DIR,
+      apply: async (changed) => {
+        this.plugin.settings.cardDir = String(changed || '').trim() || DEFAULT_CARD_DIR;
+        await this.plugin.saveSettings();
+        await this.plugin.refreshShelfBase();
+      },
+    });
 
-    new Setting(containerEl)
-      .setName('书架 Base 路径')
-      .setDesc('Base 文件的写入位置，必须以 .base 结尾。')
-      .addText((text) => text
-        .setPlaceholder('20 笔记/书架.base')
-        .setValue(this.plugin.settings.shelfBasePath || DEFAULT_SHELF_BASE)
-        .onChange(async (value) => {
-          this.plugin.settings.shelfBasePath = value.trim() || DEFAULT_SHELF_BASE;
-          await this.plugin.saveSettings();
-          await this.plugin.refreshShelfBase();
-        }));
+    addPathSetting({
+      name: '读书笔记目录',
+      desc: '「新建读书笔记」的写入位置。',
+      placeholder: DEFAULT_READING_DIR,
+      value: this.plugin.settings.readingNoteDir || DEFAULT_READING_DIR,
+      apply: async (changed) => {
+        this.plugin.settings.readingNoteDir = String(changed || '').trim() || DEFAULT_READING_DIR;
+        await this.plugin.saveSettings();
+      },
+    });
+
+    addPathSetting({
+      name: '书架 Base 文件',
+      desc: 'Base 文件位置。选目录后自动拼成 <目录>/书架.base。',
+      placeholder: DEFAULT_SHELF_BASE,
+      value: this.plugin.settings.shelfBasePath || DEFAULT_SHELF_BASE,
+      apply: async (changed, fromPicker) => {
+        const raw = String(changed || '').trim();
+        const next = fromPicker && raw ? `${raw.replace(/\/+$/, '')}/书架.base` : raw;
+        this.plugin.settings.shelfBasePath = next || DEFAULT_SHELF_BASE;
+        await this.plugin.saveSettings();
+        await this.plugin.refreshShelfBase();
+      },
+    });
 
     new Setting(containerEl)
       .setName('自动维护书架 Base')
@@ -4555,34 +4578,46 @@ class BookFormatSettingTab extends PluginSettingTab {
       header.settingEl.addClass('bfs-profile-header');
 
       const addPathField = (name, desc, key, placeholder, pickFolder = false) => {
-        new Setting(containerEl)
-          .setName(name)
-          .setDesc(desc)
-          .addText((text) => {
-            text.setPlaceholder(placeholder)
-              .setValue(entry[key] || '')
-              .onChange(async (value) => {
-                entry[key] = value;
-                await this.plugin.saveSettings();
-              });
-            if (pickFolder) {
-              text.inputEl.addEventListener('contextmenu', (event) => {
-                event.preventDefault();
-                this.plugin.pickOutputFolder((folderPath) => {
-                  text.setValue(folderPath);
-                  entry[key] = folderPath;
-                  void this.plugin.saveSettings();
-                });
-              });
-            }
-            text.inputEl.addEventListener('blur', async () => {
-              try {
-                await this.plugin.validateProfileEntry(entry);
-              } catch (error) {
-                new Notice(`路径配置错误：${error.message}`, 9000);
-              }
+        const setting = new Setting(containerEl).setName(name).setDesc(desc);
+        let textControl = null;
+        setting.addText((text) => {
+          textControl = text;
+          text.setPlaceholder(placeholder)
+            .setValue(entry[key] || '')
+            .onChange(async (value) => {
+              entry[key] = value;
+              await this.plugin.saveSettings();
             });
+          if (pickFolder) {
+            text.inputEl.addEventListener('contextmenu', (event) => {
+              event.preventDefault();
+              this.plugin.pickOutputFolder((folderPath) => {
+                text.setValue(folderPath);
+                entry[key] = folderPath;
+                void this.plugin.saveSettings();
+              });
+            });
+          }
+          text.inputEl.addEventListener('blur', async () => {
+            try {
+              await this.plugin.validateProfileEntry(entry);
+            } catch (error) {
+              new Notice(`路径配置错误：${error.message}`, 9000);
+            }
           });
+        });
+        if (pickFolder) {
+          setting.addExtraButton((button) => button
+            .setIcon('folder')
+            .setTooltip('从 vault 目录中选择')
+            .onClick(() => {
+              this.plugin.pickOutputFolder((folderPath) => {
+                if (textControl) textControl.setValue(folderPath);
+                entry[key] = folderPath;
+                void this.plugin.saveSettings();
+              });
+            }));
+        }
       };
 
       addPathField('书籍标识', '用于匹配书名和生成文件名，例如：书名。', 'bookName', '书名');

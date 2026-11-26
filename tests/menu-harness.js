@@ -59,7 +59,7 @@ file.path = '10 书籍/测试书/测试书.txt';
 const menu = makeMenu();
 plugin.addBookFileMenu(menu, file);
 assert.strictEqual(menu.items.length, 1);
-assert.strictEqual(menu.items[0].title, '书库三格式同步');
+assert.strictEqual(menu.items[0].title, '书库');
 assert.strictEqual(menu.items[0].submenu.items.length, 4);
 assert.deepStrictEqual(menu.items[0].submenu.items.map((item) => item.title), [
   '生成章节标题建议',
