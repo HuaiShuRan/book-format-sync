@@ -25,7 +25,7 @@ const {
 const { buildEpub } = require('../lib/epub');
 const { readZip } = require('../lib/zip');
 const { normalizeBookProfile, migrateSettings, validateProfilePaths } = require('../lib/paths');
-const { scaffoldPlan, dirNoteContent, recommendationMarkdown } = require('../lib/scaffold');
+const { scaffoldPlan, dirNoteContent, recommendationMarkdown, isVaultEmpty } = require('../lib/scaffold');
 
 let passed = 0;
 
@@ -373,6 +373,19 @@ test('已有内容时的建议文档包含结构与三种走法', () => {
   assert.ok(text.includes('零移动'));
   assert.ok(text.includes('渐进'));
   assert.ok(text.includes('更新日期: 2026-11-27'));
+});
+
+console.log('vault 空判定');
+
+test('只有系统目录时算空', () => {
+  assert.strictEqual(isVaultEmpty([]), true);
+  assert.strictEqual(isVaultEmpty(['.obsidian', '.trash', '.git', '.book-format-sync']), true);
+});
+
+test('任意用户文件夹或文件都算非空', () => {
+  assert.strictEqual(isVaultEmpty(['.obsidian', '20 笔记']), false);
+  assert.strictEqual(isVaultEmpty(['说明.md']), false);
+  assert.strictEqual(isVaultEmpty(['.obsidian', '00 收件箱']), false);
 });
 
 console.log('YAML 与时间');

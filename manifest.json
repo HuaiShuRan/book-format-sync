@@ -1,7 +1,7 @@
 {
   "id": "book-library",
   "name": "书库",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "minAppVersion": "1.9.0",
   "description": "书库：维护每本书的 txt、md、epub 三格式（统一章节名与 2em 首行缩进，写入前校验、覆盖前备份），并按书籍卡片目录自动生成 Bases 书架。",
   "author": "HuaiShuRan",

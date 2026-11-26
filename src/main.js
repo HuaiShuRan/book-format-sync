@@ -48,9 +48,9 @@ const {
   todayStamp,
 } = require('../lib/templates');
 const {
-  INBOX_DIR,
   DIR_NOTE_FILE,
   RECOMMENDATION_FILE,
+  isVaultEmpty,
   dirNoteContent,
   scaffoldPlan,
   recommendationMarkdown,
@@ -1224,14 +1224,18 @@ class BookFormatSyncPlugin extends Plugin {
     }
   }
 
-  /** 目录是否不存在或为空。 */
-  async isFolderEmpty(folderPath) {
-    const path = String(folderPath || '').replace(/^\/+|\/+$/g, '');
-    if (!path) return true;
-    if (!(await this.exists(path))) return true;
+  /**
+   * vault 顶层是否为空：只有 .obsidian / .trash / .git / .book-format-sync 时算空。
+   * 只要出现任何用户文件夹或文件，就视为「已有内容」。
+   */
+  vaultIsEmpty() {
     try {
-      const listing = await this.adapter.list(path);
-      return (listing.files || []).length === 0 && (listing.folders || []).length === 0;
+      const loaded = this.app.vault.getAllLoadedFiles ? this.app.vault.getAllLoadedFiles() : [];
+      const names = loaded
+        .filter((entry) => entry && entry.path && entry.path !== '/')
+        .filter((entry) => !entry.path.includes('/'))
+        .map((entry) => entry.name);
+      return isVaultEmpty(names);
     } catch (error) {
       return false;
     }
@@ -1256,22 +1260,21 @@ class BookFormatSyncPlugin extends Plugin {
       readingNoteDir: this.settings.readingNoteDir,
       shelfBasePath: this.settings.shelfBasePath,
     });
-    const empty = await this.isFolderEmpty(this.rootPath);
+    const empty = this.vaultIsEmpty();
 
     if (!empty) {
-      const target = posixJoin(INBOX_DIR, RECOMMENDATION_FILE);
+      const target = RECOMMENDATION_FILE;
       if (await this.exists(target)) {
-        new Notice(`书库已有内容，未做任何改动；建议文件已存在：${target}`, 7000);
+        new Notice(`vault 已有内容，未做任何改动；建议文件已存在：${target}`, 7000);
         await this.app.workspace.openLinkText(target, '', false);
         return false;
       }
-      const ok = await this.askConfirm('书库已有内容', [
-        '不会移动、不会删除、不会覆盖任何现有文件。',
-        `只会在「${INBOX_DIR}」生成一份结构建议，供你对照调整。`,
+      const ok = await this.askConfirm('vault 已有内容', [
+        '不会移动、不会删除、不会覆盖任何现有文件或文件夹。',
+        `只会在 vault 根目录生成一份《${RECOMMENDATION_FILE}》，供你对照调整。`,
         '确定生成吗？',
       ]);
       if (!ok) return false;
-      await this.ensureFolder(INBOX_DIR);
       await this.adapter.write(target, recommendationMarkdown({
         bookRoot: this.settings.bookRoot,
         cardDir: this.settings.cardDir,
@@ -1279,7 +1282,7 @@ class BookFormatSyncPlugin extends Plugin {
         shelfBasePath: this.settings.shelfBasePath,
         date: todayStamp(),
       }));
-      new Notice(`已生成结构建议：${target}`, 6000);
+      new Notice(`已生成结构建议：${target}（未改动任何其它内容）`, 6000);
       await this.app.workspace.openLinkText(target, '', false);
       return true;
     }

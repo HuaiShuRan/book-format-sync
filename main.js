@@ -1681,6 +1681,22 @@ const SHARED_ATTACH_DIR = '90 附件';
 const DIR_NOTE_FILE = '_目录说明.md';
 const RECOMMENDATION_FILE = '书库结构建议.md';
 
+/** 判断 vault 是否为空时忽略的系统目录。 */
+const SYSTEM_DIRS = new Set(['.obsidian', '.trash', '.git', '.book-format-sync']);
+
+/**
+ * vault 顶层名字列表是否算「空」。
+ * 只有系统目录（.obsidian 等）时仍算空；出现任何用户文件夹或文件都算有内容。
+ */
+function isVaultEmpty(names) {
+  const list = Array.isArray(names) ? names : [];
+  return !list.some((name) => {
+    const clean = String(name == null ? '' : name).trim();
+    if (!clean) return false;
+    return !SYSTEM_DIRS.has(clean.toLowerCase());
+  });
+}
+
 function posixDirname(value) {
   const text = String(value == null ? '' : value).replace(/\\/g, '/');
   const index = text.lastIndexOf('/');
@@ -1753,7 +1769,7 @@ function recommendationMarkdown(options) {
     '# 书库结构建议',
     '',
     '> [!info] 为什么有这份文件',
-    '> 书库目录里已经有内容了，插件**没有改动任何文件**。这份文件只解释推荐结构，是否调整由你自己决定。',
+    '> vault 里已经有内容了，插件**没有改动任何文件或文件夹**。这份文件只解释推荐结构，是否调整由你自己决定。',
     '',
     '## 推荐结构',
     '',
@@ -1796,7 +1812,7 @@ function recommendationMarkdown(options) {
     '3. **渐进**：旧书不动，新书按推荐结构走。',
     '',
     '> [!tip] 自动布置',
-    '> 只有「书库目录」为空时，插件才能一键布置目录结构。你现在已有内容，所以这里只给建议。',
+    '> 只有 **vault 里一个用户文件夹/文件都没有** 时，插件才能一键布置目录结构。你现在已有内容，所以这里只给建议。',
     '',
     '%% 本文件由「书库」插件生成，可自由修改或删除。 %%',
     '',
@@ -1808,6 +1824,8 @@ module.exports = {
   SHARED_ATTACH_DIR,
   DIR_NOTE_FILE,
   RECOMMENDATION_FILE,
+  SYSTEM_DIRS,
+  isVaultEmpty,
   posixDirname,
   dirNoteContent,
   scaffoldPlan,
@@ -2844,9 +2862,9 @@ const {
   todayStamp,
 } = __require("lib/templates.js");
 const {
-  INBOX_DIR,
   DIR_NOTE_FILE,
   RECOMMENDATION_FILE,
+  isVaultEmpty,
   dirNoteContent,
   scaffoldPlan,
   recommendationMarkdown,
@@ -4020,14 +4038,18 @@ class BookFormatSyncPlugin extends Plugin {
     }
   }
 
-  /** 目录是否不存在或为空。 */
-  async isFolderEmpty(folderPath) {
-    const path = String(folderPath || '').replace(/^\/+|\/+$/g, '');
-    if (!path) return true;
-    if (!(await this.exists(path))) return true;
+  /**
+   * vault 顶层是否为空：只有 .obsidian / .trash / .git / .book-format-sync 时算空。
+   * 只要出现任何用户文件夹或文件，就视为「已有内容」。
+   */
+  vaultIsEmpty() {
     try {
-      const listing = await this.adapter.list(path);
-      return (listing.files || []).length === 0 && (listing.folders || []).length === 0;
+      const loaded = this.app.vault.getAllLoadedFiles ? this.app.vault.getAllLoadedFiles() : [];
+      const names = loaded
+        .filter((entry) => entry && entry.path && entry.path !== '/')
+        .filter((entry) => !entry.path.includes('/'))
+        .map((entry) => entry.name);
+      return isVaultEmpty(names);
     } catch (error) {
       return false;
     }
@@ -4052,22 +4074,21 @@ class BookFormatSyncPlugin extends Plugin {
       readingNoteDir: this.settings.readingNoteDir,
       shelfBasePath: this.settings.shelfBasePath,
     });
-    const empty = await this.isFolderEmpty(this.rootPath);
+    const empty = this.vaultIsEmpty();
 
     if (!empty) {
-      const target = posixJoin(INBOX_DIR, RECOMMENDATION_FILE);
+      const target = RECOMMENDATION_FILE;
       if (await this.exists(target)) {
-        new Notice(`书库已有内容，未做任何改动；建议文件已存在：${target}`, 7000);
+        new Notice(`vault 已有内容，未做任何改动；建议文件已存在：${target}`, 7000);
         await this.app.workspace.openLinkText(target, '', false);
         return false;
       }
-      const ok = await this.askConfirm('书库已有内容', [
-        '不会移动、不会删除、不会覆盖任何现有文件。',
-        `只会在「${INBOX_DIR}」生成一份结构建议，供你对照调整。`,
+      const ok = await this.askConfirm('vault 已有内容', [
+        '不会移动、不会删除、不会覆盖任何现有文件或文件夹。',
+        `只会在 vault 根目录生成一份《${RECOMMENDATION_FILE}》，供你对照调整。`,
         '确定生成吗？',
       ]);
       if (!ok) return false;
-      await this.ensureFolder(INBOX_DIR);
       await this.adapter.write(target, recommendationMarkdown({
         bookRoot: this.settings.bookRoot,
         cardDir: this.settings.cardDir,
@@ -4075,7 +4096,7 @@ class BookFormatSyncPlugin extends Plugin {
         shelfBasePath: this.settings.shelfBasePath,
         date: todayStamp(),
       }));
-      new Notice(`已生成结构建议：${target}`, 6000);
+      new Notice(`已生成结构建议：${target}（未改动任何其它内容）`, 6000);
       await this.app.workspace.openLinkText(target, '', false);
       return true;
     }

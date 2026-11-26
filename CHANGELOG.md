@@ -5,6 +5,13 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.7.1] - 2026-11-27
+
+### Changed
+
+- 「布置书库」的判定范围由「书库目录是否为空」改为**整个 vault 是否为空**：只要 vault 里存在任何用户文件夹或文件（`.obsidian`、`.trash`、`.git`、`.book-format-sync` 除外），就只生成建议、不做任何其它改动。
+- 建议文件改为写到 **vault 根目录的 `书库结构建议.md`**，不再新建 `00 收件箱`，确保"除了这一份 md 之外不产生任何文件夹或文件"。
+
 ## [1.7.0] - 2026-11-27
 
 ### Added
