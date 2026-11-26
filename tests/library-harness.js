@@ -7,21 +7,19 @@
 
 const assert = require('assert');
 const {
-  DEFAULT_NOTES_ROOT,
-  SHELF_FILE,
-  SHELF_NOTE_FILE,
+  DEFAULT_CARD_DIR,
+  DEFAULT_READING_DIR,
+  DEFAULT_SHELF_BASE,
   todayStamp,
   yamlValue,
-  normalizeNotesRoot,
-  cardDir,
+  coverValue,
+  normalizeDir,
+  normalizeShelfBase,
   bookCardPath,
   readingNotePath,
-  shelfBoardPath,
-  shelfNotePath,
   bookCardTemplate,
   readingNoteTemplate,
   shelfBoardTemplate,
-  shelfNoteTemplate,
 } = require('../lib/templates');
 
 let passed = 0;
@@ -64,38 +62,58 @@ function assertFrontmatterClosed(text, label) {
   assert.ok(end > 0, `${label} frontmatter 未闭合`);
 }
 
-console.log('模板路径');
+console.log('路径与规范化');
 
-test('默认笔记根目录', () => {
-  assert.strictEqual(normalizeNotesRoot(''), DEFAULT_NOTES_ROOT);
-  assert.strictEqual(normalizeNotesRoot(null), DEFAULT_NOTES_ROOT);
+test('目录规范化：反斜杠、首尾斜杠、空值回退', () => {
+  assert.strictEqual(normalizeDir('\\20 笔记\\书目\\'), '20 笔记/书目');
+  assert.strictEqual(normalizeDir('/notes/', 'x'), 'notes');
+  assert.strictEqual(normalizeDir('', DEFAULT_CARD_DIR), DEFAULT_CARD_DIR);
+  assert.strictEqual(normalizeDir(null, 'fallback'), 'fallback');
 });
 
-test('笔记根目录规范化（反斜杠、首尾斜杠）', () => {
-  assert.strictEqual(normalizeNotesRoot('\\20 笔记\\'), '20 笔记');
-  assert.strictEqual(normalizeNotesRoot('/notes/'), 'notes');
+test('书架 Base 路径强制 .base 后缀', () => {
+  assert.strictEqual(normalizeShelfBase('20 笔记/书架', DEFAULT_SHELF_BASE), '20 笔记/书架.base');
+  assert.strictEqual(normalizeShelfBase('20 笔记/书架.base'), '20 笔记/书架.base');
+  assert.strictEqual(normalizeShelfBase('', DEFAULT_SHELF_BASE), DEFAULT_SHELF_BASE);
 });
 
-test('书籍卡路径包含子目录', () => {
-  assert.strictEqual(bookCardPath('20 笔记', '某书'), '20 笔记/书目/某书.md');
-  assert.strictEqual(cardDir('20 笔记'), '20 笔记/书目');
+test('书籍卡路径跟随卡片目录', () => {
+  assert.strictEqual(bookCardPath('20 笔记/书目', '某书'), '20 笔记/书目/某书.md');
+  assert.strictEqual(bookCardPath('自定义/卡片', '某书'), '自定义/卡片/某书.md');
+  assert.strictEqual(bookCardPath('', '某书'), `${DEFAULT_CARD_DIR}/某书.md`);
 });
 
-test('读书笔记与书架路径', () => {
-  assert.strictEqual(readingNotePath('20 笔记', '某书'), '20 笔记/读书笔记/某书.md');
-  assert.strictEqual(shelfBoardPath('20 笔记'), `20 笔记/${SHELF_FILE}`);
-  assert.strictEqual(shelfNotePath('20 笔记'), `20 笔记/${SHELF_NOTE_FILE}`);
-  assert.ok(SHELF_FILE.endsWith('.base'), '看板本体必须是 .base');
+test('读书笔记路径跟随笔记目录', () => {
+  assert.strictEqual(readingNotePath('20 笔记/读书笔记', '某书'), '20 笔记/读书笔记/某书.md');
+  assert.strictEqual(readingNotePath('', '某书'), `${DEFAULT_READING_DIR}/某书.md`);
 });
 
 test('非法文件名字符被替换', () => {
-  assert.strictEqual(bookCardPath('notes', 'a/b:c*d'), 'notes/书目/a_b_c_d.md');
-  assert.strictEqual(bookCardPath('notes', '  '), 'notes/书目/未命名.md');
+  assert.strictEqual(bookCardPath('notes', 'a/b:c*d'), 'notes/a_b_c_d.md');
+  assert.strictEqual(bookCardPath('notes', '  '), 'notes/未命名.md');
+});
+
+console.log('封面取值');
+
+test('vault 路径转成 wikilink', () => {
+  assert.strictEqual(coverValue('90 附件/某书/cover.jpg'), '"[[90 附件/某书/cover.jpg]]"');
+  assert.strictEqual(coverValue('[[cover.jpg]]'), '"[[cover.jpg]]"');
+  assert.strictEqual(coverValue('![[cover.jpg|300]]'), '"[[cover.jpg]]"');
+});
+
+test('http 地址原样保留', () => {
+  assert.strictEqual(coverValue('https://example.com/a.png'), '"https://example.com/a.png"');
+  assert.strictEqual(coverValue('http://example.com/a.png'), '"http://example.com/a.png"');
+});
+
+test('空封面写空值', () => {
+  assert.strictEqual(coverValue(''), ' ');
+  assert.strictEqual(coverValue(null), ' ');
 });
 
 console.log('书籍卡');
 
-test('书籍卡 frontmatter 闭合且含关键字段', () => {
+test('frontmatter 闭合且含关键字段', () => {
   const text = bookCardTemplate({ name: '某书', date: '2026-11-26' });
   assertFrontmatterClosed(text, '书籍卡');
   assert.ok(text.includes('笔记类型: 书目'));
@@ -104,29 +122,32 @@ test('书籍卡 frontmatter 闭合且含关键字段', () => {
   assert.ok(text.includes('# 《某书》'));
 });
 
-test('书籍卡标签合法（无空格、非纯数字）', () => {
-  const text = bookCardTemplate({ name: '某书', date: '2026-11-26' });
-  const tags = parseTags(text);
-  assert.ok(tags.length > 0, '应至少有一个标签');
-  assertValidTags(tags, '书籍卡');
+test('封面写入 frontmatter', () => {
+  const text = bookCardTemplate({ name: '某书', cover: '90 附件/某书/cover.jpg' });
+  assert.ok(text.includes('封面: "[[90 附件/某书/cover.jpg]]"'));
 });
 
-test('书籍卡调用标准 callout 类型', () => {
+test('无封面时字段留空', () => {
   const text = bookCardTemplate({ name: '某书' });
-  assert.ok(/^> \[!info\]/m.test(text), '应有 [!info]');
-  assert.ok(/^> \[!quote\]/m.test(text), '应有 [!quote]');
-  assert.ok(text.includes('> （原文）'));
+  assert.ok(/^封面: *$/m.test(text), '封面应为空');
 });
 
-test('书籍卡不含 cssclasses（避免继承正文缩进）', () => {
+test('标签合法（无空格、非纯数字）', () => {
+  assertValidTags(parseTags(bookCardTemplate({ name: '某书' })), '书籍卡');
+});
+
+test('只用标准 callout 类型', () => {
   const text = bookCardTemplate({ name: '某书' });
-  assert.ok(!text.includes('cssclasses'), '书籍卡不应带 cssclasses');
+  assert.ok(/^> \[!info\]/m.test(text));
+  assert.ok(/^> \[!quote\]/m.test(text));
 });
 
-test('书籍卡书名含特殊字符时正文原样、路径安全', () => {
-  const text = bookCardTemplate({ name: '爸爸，请让我单推吧！' });
-  assert.ok(text.includes('# 《爸爸，请让我单推吧！》'));
-  assert.ok(!bookCardPath('notes', '爸爸，请让我单推吧！').includes('，') === true || true);
+test('不写 cssclasses（避免继承正文缩进）', () => {
+  assert.ok(!bookCardTemplate({ name: '某书' }).includes('cssclasses'));
+});
+
+test('书名含特殊字符时正文原样', () => {
+  assert.ok(bookCardTemplate({ name: '爸爸，请让我单推吧！' }).includes('# 《爸爸，请让我单推吧！》'));
 });
 
 test('bookRoot 提示只在提供时出现', () => {
@@ -136,7 +157,7 @@ test('bookRoot 提示只在提供时出现', () => {
 
 console.log('读书笔记');
 
-test('读书笔记 frontmatter 与书目互链', () => {
+test('frontmatter 与书目互链', () => {
   const text = readingNoteTemplate({ name: '某书', date: '2026-11-26' });
   assertFrontmatterClosed(text, '读书笔记');
   assert.ok(text.includes('笔记类型: 读书笔记'));
@@ -145,73 +166,45 @@ test('读书笔记 frontmatter 与书目互链', () => {
   assertValidTags(parseTags(text), '读书笔记');
 });
 
-test('读书笔记书名含引号时不会破坏 frontmatter', () => {
+test('书名含引号时不破坏 frontmatter', () => {
   const text = readingNoteTemplate({ name: '书"名' });
-  const end = text.indexOf('\n---\n', 4);
-  assert.ok(end > 0, 'frontmatter 应正常闭合');
+  assert.ok(text.indexOf('\n---\n', 4) > 0);
 });
 
-console.log('书架看板（Bases）');
+console.log('书架 Base');
 
-test('看板本体是 YAML，不含前导 frontmatter', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
-  assert.ok(text.startsWith('#'), '应以便于阅读的注释行开头');
-  assert.ok(!text.startsWith('---'), '不应有 frontmatter 分隔符');
+test('是 YAML 而非 frontmatter 笔记', () => {
+  const text = shelfBoardTemplate({ cardDir: '20 笔记/书目' });
+  assert.ok(text.startsWith('#'), '应以注释行开头');
+  assert.ok(!text.startsWith('---'), '不应带 frontmatter');
   assert.ok(text.includes('filters:'));
   assert.ok(text.includes('views:'));
 });
 
-test('全局筛选限定书籍卡目录', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
-  assert.ok(text.includes('file.inFolder("20 笔记/书目")'));
+test('数据源跟随卡片目录', () => {
+  assert.ok(shelfBoardTemplate({ cardDir: '20 笔记/书目' }).includes('file.inFolder("20 笔记/书目")'));
+  assert.ok(shelfBoardTemplate({ cardDir: '自定义/卡片' }).includes('file.inFolder("自定义/卡片")'));
+  assert.ok(shelfBoardTemplate({}).includes(DEFAULT_CARD_DIR));
 });
 
-test('四个视图类型齐全：cards×2 / kanban / table', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
-  const count = (re) => (text.match(re) || []).length;
-  assert.strictEqual(count(/^\s+- type: cards$/gm), 2, '应有两个卡片视图');
-  assert.strictEqual(count(/^\s+- type: kanban$/gm), 1, '应有一个看板视图');
-  assert.strictEqual(count(/^\s+- type: table$/gm), 1, '应有一个表格视图');
-});
-
-test('卡片视图用封面属性', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
+test('卡片视图带封面与卡片尺寸', () => {
+  const text = shelfBoardTemplate({});
+  assert.ok(text.includes('- type: cards'));
   assert.ok(text.includes('image: 封面'));
   assert.ok(text.includes('imageFit: contain'));
   assert.ok(/imageAspectRatio: 0\.\d+/.test(text));
   assert.ok(/cardSize: \d+/.test(text));
 });
 
-test('看板视图按状态分列', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
-  assert.ok(text.includes('groupBy:'));
-  assert.ok(text.includes('property: 状态'));
-  for (const status of ['想读', '在读', '已读', '弃读']) {
-    assert.ok(text.includes(`      - ${status}`), `groupOrder 应包含 ${status}`);
-  }
+test('含表格清单视图', () => {
+  const text = shelfBoardTemplate({});
+  assert.ok(text.includes('- type: table'));
+  assert.ok(text.includes('name: 清单'));
+  assert.ok(!text.includes('- type: kanban'), '书架形式不需要看板视图');
 });
 
-test('排序使用 Bases 的 sort 结构', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
-  assert.ok(text.includes('sort:'));
-  assert.ok(text.includes('property: 评分'));
-  assert.ok(text.includes('direction: DESC'));
-});
-
-test('不再依赖 Dataview', () => {
-  const text = shelfBoardTemplate({ notesRoot: '20 笔记' });
-  assert.strictEqual((text.match(/dataview/g) || []).length, 0, '不应出现 dataview');
-});
-
-console.log('书架落地页');
-
-test('落地页嵌入看板并写维护说明', () => {
-  const text = shelfNoteTemplate({ notesRoot: '20 笔记', date: '2026-11-26' });
-  assertFrontmatterClosed(text, '书架落地页');
-  assert.ok(text.includes('笔记类型: 索引'));
-  assert.ok(text.includes('![[00 书架]]'), '应嵌入看板本体');
-  assert.ok(text.includes('新建书籍卡'));
-  assertValidTags(parseTags(text), '书架落地页');
+test('不依赖 Dataview', () => {
+  assert.strictEqual((shelfBoardTemplate({}).match(/dataview/g) || []).length, 0);
 });
 
 console.log('YAML 与时间');

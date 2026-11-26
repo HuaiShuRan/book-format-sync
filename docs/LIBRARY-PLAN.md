@@ -1,4 +1,4 @@
-# book-format-sync 图书馆化实施计划
+# book-library 图书馆化实施计划
 
 > 起始版本：`1.3.9`　|　计划版本：`1.4.x` → `1.6.x`　|　编写：2026-11-26
 > 目标：把"三格式同步工具"扩展成"个人图书馆插件"——能读、能管书、能一键建卡片与书架。
@@ -305,13 +305,13 @@ views:
 4. 把 `main.js`、`manifest.json`、`styles.css` 拷到目标库：
 
 ```text
-D:\小米云盘\note\Book\.obsidian\plugins\book-format-sync\
+D:\小米云盘\note\Book\.obsidian\plugins\book-library\
 ```
 
 5. 重启 Obsidian，确认"已安装插件"里能看到并启用
 6. 打 tag 走 release workflow
 
-> 注意：目录名必须等于 `manifest.json` 的 `id`（`book-format-sync`），否则不加载。
+> 注意：目录名必须等于 `manifest.json` 的 `id`（`book-library`），否则不加载。
 
 ---
 

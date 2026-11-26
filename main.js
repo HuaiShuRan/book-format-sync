@@ -1648,23 +1648,20 @@ module.exports = {
 'use strict';
 
 /**
- * 书库内容框架：书籍卡、读书笔记、书架看板。
+ * 书库内容框架：书籍卡、读书笔记、书架 Base。
  *
  * 约束：
  * - 只产出字符串，不读写 vault，方便单测（见 tests/library-harness.js）
  * - 模板只生成一次，生成后与插件脱钩，用户可自由修改
- * - 书籍卡放在「笔记目录/书目/」，不放进书库目录，避免被三格式规范化改写
- * - 书架看板用 Obsidian 内置 Bases（.base），卡片视图 + 封面 + 看板视图，
- *   不依赖任何社区插件；`.md` 只是嵌入看板 + 使用说明的落地页
+ * - 书籍卡放在「卡片目录」，不放进书库目录，避免被三格式规范化改写
+ * - 书架用 Obsidian 内置 Bases（.base），卡片视图 + 封面，不依赖社区插件
  */
 
 const { sanitizeFileName } = __require("lib/text.js");
 
-const DEFAULT_NOTES_ROOT = '20 笔记';
-const CARD_SUBDIR = '书目';
-const READING_SUBDIR = '读书笔记';
-const SHELF_FILE = '00 书架.base';
-const SHELF_NOTE_FILE = '00 书架.md';
+const DEFAULT_CARD_DIR = '20 笔记/书目';
+const DEFAULT_READING_DIR = '20 笔记/读书笔记';
+const DEFAULT_SHELF_BASE = '20 笔记/书架.base';
 
 function pad2(value) {
   return String(value).padStart(2, '0');
@@ -1687,35 +1684,34 @@ function yamlValue(value) {
   return text;
 }
 
-function normalizeNotesRoot(notesRoot) {
-  const root = String(notesRoot == null ? '' : notesRoot).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').trim();
-  return root || DEFAULT_NOTES_ROOT;
+/** vault 内相对目录：去掉首尾斜杠、统一正斜杠；空值回退默认。 */
+function normalizeDir(value, fallback) {
+  const raw = String(value == null ? '' : value).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').trim();
+  return raw || fallback;
 }
 
-function cardDir(notesRoot) {
-  return `${normalizeNotesRoot(notesRoot)}/${CARD_SUBDIR}`;
+/** 书架 Base 路径：强制 .base 后缀，空值回退默认。 */
+function normalizeShelfBase(value, fallback) {
+  const raw = normalizeDir(value, fallback || DEFAULT_SHELF_BASE);
+  return /\.base$/i.test(raw) ? raw : `${raw}.base`;
 }
 
-function readingDir(notesRoot) {
-  return `${normalizeNotesRoot(notesRoot)}/${READING_SUBDIR}`;
+function bookCardPath(cardDir, bookName) {
+  return `${normalizeDir(cardDir, DEFAULT_CARD_DIR)}/${sanitizeFileName(bookName)}.md`;
 }
 
-function bookCardPath(notesRoot, bookName) {
-  return `${cardDir(notesRoot)}/${sanitizeFileName(bookName)}.md`;
+function readingNotePath(readingDir, bookName) {
+  return `${normalizeDir(readingDir, DEFAULT_READING_DIR)}/${sanitizeFileName(bookName)}.md`;
 }
 
-function readingNotePath(notesRoot, bookName) {
-  return `${readingDir(notesRoot)}/${sanitizeFileName(bookName)}.md`;
-}
-
-/** Bases 数据库文件（书架看板本体）。 */
-function shelfBoardPath(notesRoot) {
-  return `${normalizeNotesRoot(notesRoot)}/${SHELF_FILE}`;
-}
-
-/** 落地页笔记，嵌入上面的 .base 并写使用说明。 */
-function shelfNotePath(notesRoot) {
-  return `${normalizeNotesRoot(notesRoot)}/${SHELF_NOTE_FILE}`;
+/** 封面：vault 内路径写成 wikilink，http(s) 原样保留。 */
+function coverValue(cover) {
+  const text = String(cover == null ? '' : cover).trim();
+  if (!text) return ' ';
+  if (/^https?:\/\//i.test(text)) return `"${text.replace(/"/g, '')}"`;
+  const cleaned = text.replace(/^!?\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
+  if (!cleaned) return ' ';
+  return `"[[${cleaned}]]"`;
 }
 
 /** 书籍卡：一本书一篇，承载元数据与摘录。 */
@@ -1744,7 +1740,7 @@ function bookCardTemplate(options) {
   lines.push('开始日期: ');
   lines.push('读完日期: ');
   lines.push('阅读进度: ');
-  lines.push('封面: ');
+  lines.push(`封面: ${coverValue(opts.cover)}`);
   lines.push('---');
   lines.push('');
   lines.push(`# 《${name}》`);
@@ -1825,33 +1821,24 @@ function readingNoteTemplate(options) {
 }
 
 /**
- * 书架看板本体：Obsidian Bases 文件（.base）。
- *
- * 视图：卡片（带封面）/ 状态看板 / 在读 / 清单。
- * 卡片视图用 `image` 指定封面属性；看板视图按「状态」分列（Notion 风格）。
+ * 书架 Base（.base）：数据源 = 设置里的卡片目录。
+ * 视图：卡片书架（带封面）+ 表格清单。
  */
 function shelfBoardTemplate(options) {
   const opts = options || {};
-  const from = cardDir(opts.notesRoot);
+  const from = normalizeDir(opts.cardDir, DEFAULT_CARD_DIR);
   const lines = [];
 
-  lines.push('# 书架看板 —— Obsidian Bases 文件，可直接用 Obsidian 打开，也可编辑本文件');
+  lines.push('# 书架 —— Obsidian Bases 文件；数据来自书籍卡目录，可直接编辑视图');
   lines.push('filters:');
   lines.push('  and:');
   lines.push(`    - file.inFolder("${from}")`);
   lines.push('properties:');
-  for (const [key, label] of [
-    ['封面', '封面'],
-    ['状态', '状态'],
-    ['评分', '评分'],
-    ['作者', '作者'],
-    ['体裁', '体裁'],
-  ]) {
+  for (const key of ['封面', '状态', '评分', '作者', '体裁']) {
     lines.push(`  ${key}:`);
-    lines.push(`    displayName: ${label}`);
+    lines.push(`    displayName: ${key}`);
   }
   lines.push('views:');
-  // 1. 卡片画廊（封面）
   lines.push('  - type: cards');
   lines.push('    name: 书架');
   lines.push('    image: 封面');
@@ -1863,27 +1850,6 @@ function shelfBoardTemplate(options) {
   lines.push('    sort:');
   lines.push('      - property: 评分');
   lines.push('        direction: DESC');
-  // 2. 状态看板（Notion 式分列）
-  lines.push('  - type: kanban');
-  lines.push('    name: 状态看板');
-  lines.push('    groupBy:');
-  lines.push('      property: 状态');
-  lines.push('      direction: ASC');
-  lines.push('    groupOrder:');
-  for (const status of ['想读', '在读', '已读', '弃读']) lines.push(`      - ${status}`);
-  // 3. 在读
-  lines.push('  - type: cards');
-  lines.push('    name: 在读');
-  lines.push('    image: 封面');
-  lines.push('    imageFit: contain');
-  lines.push('    imageAspectRatio: 0.72');
-  lines.push('    cardSize: 220');
-  lines.push('    filters:');
-  lines.push('      and:');
-  lines.push('        - \'状态 == "在读"\'');
-  lines.push('    order:');
-  for (const col of ['file.name', '作者', '阅读进度']) lines.push(`      - ${col}`);
-  // 4. 表格清单
   lines.push('  - type: table');
   lines.push('    name: 清单');
   lines.push('    order:');
@@ -1894,62 +1860,20 @@ function shelfBoardTemplate(options) {
   return lines.join('\n');
 }
 
-/** 落地页：嵌入看板 + 使用说明。 */
-function shelfNoteTemplate(options) {
-  const opts = options || {};
-  const notesRoot = normalizeNotesRoot(opts.notesRoot);
-  const date = opts.date || todayStamp();
-  const baseName = SHELF_FILE.replace(/\.base$/, '');
-  const lines = [];
-
-  lines.push('---');
-  lines.push('aliases: []');
-  lines.push('tags:');
-  lines.push('  - 书/书架');
-  lines.push('笔记类型: 索引');
-  lines.push(`更新日期: ${date}`);
-  lines.push('---');
-  lines.push('');
-  lines.push('# 书架');
-  lines.push('');
-  lines.push(`![[${baseName}]]`);
-  lines.push('');
-  lines.push('> [!info] 这页是什么');
-  lines.push('> 由「书库三格式同步」生成一次，之后归你自己维护。数据来自书籍卡的属性，实体是同一目录下的 `' + SHELF_FILE + '`。');
-  lines.push('');
-  lines.push('> [!tip] 怎么加一本书');
-  lines.push('> 命令面板 →「新建书籍卡」→ 填书名。想让它出现在卡片上，就在书籍卡的 `封面` 属性里填图片链接，例如 `[[封面.jpg]]` 或 `![[cover.png]]`。');
-  lines.push('');
-  lines.push('> [!note] 视图说明');
-  lines.push('> - **书架**：卡片画廊，有封面就显示封面');
-  lines.push('> - **状态看板**：按 `状态` 分列，可拖拽改状态（Notion 看板效果）');
-  lines.push('> - **在读** / **清单**：单列表格');
-  lines.push(`> 书籍卡目录：\`${cardDir(notesRoot)}\``);
-  lines.push('');
-  lines.push(`%% 新增书籍卡：命令面板 →「新建书籍卡」。看板本身是 ${SHELF_FILE}，双击即可编辑视图。 %%`);
-  lines.push('');
-  return lines.join('\n');
-}
-
 module.exports = {
-  DEFAULT_NOTES_ROOT,
-  CARD_SUBDIR,
-  READING_SUBDIR,
-  SHELF_FILE,
-  SHELF_NOTE_FILE,
+  DEFAULT_CARD_DIR,
+  DEFAULT_READING_DIR,
+  DEFAULT_SHELF_BASE,
   todayStamp,
   yamlValue,
-  normalizeNotesRoot,
-  cardDir,
-  readingDir,
+  coverValue,
+  normalizeDir,
+  normalizeShelfBase,
   bookCardPath,
   readingNotePath,
-  shelfBoardPath,
-  shelfNotePath,
   bookCardTemplate,
   readingNoteTemplate,
   shelfBoardTemplate,
-  shelfNoteTemplate,
 };
 
 },
@@ -2711,15 +2635,15 @@ const {
   outputDirsForProfile,
 } = __require("lib/paths.js");
 const {
-  DEFAULT_NOTES_ROOT,
+  DEFAULT_CARD_DIR,
+  DEFAULT_READING_DIR,
+  DEFAULT_SHELF_BASE,
   bookCardPath,
   readingNotePath,
-  shelfBoardPath,
-  shelfNotePath,
   bookCardTemplate,
   readingNoteTemplate,
   shelfBoardTemplate,
-  shelfNoteTemplate,
+  normalizeShelfBase,
   todayStamp,
 } = __require("lib/templates.js");
 
@@ -2735,7 +2659,10 @@ const DEFAULT_SETTINGS = Object.freeze({
   txtBom: false,
   maxTitleChars: 10,
   bookProfiles: [],
-  notesRoot: '20 笔记',
+  cardDir: '20 笔记/书目',
+  readingNoteDir: '20 笔记/读书笔记',
+  shelfBasePath: '20 笔记/书架.base',
+  autoShelf: true,
   settingsVersion: 2,
 });
 
@@ -2840,9 +2767,9 @@ class BookFormatSyncPlugin extends Plugin {
       callback: () => this.promptBookName('新建读书笔记', (name) => this.createReadingNote(name)),
     });
     this.addCommand({
-      id: 'generate-shelf-board',
-      name: '生成书架看板',
-      callback: () => { void this.createShelfBoard(); },
+      id: 'refresh-shelf-base',
+      name: '刷新书架 Base',
+      callback: () => { void this.refreshShelfBase(true); },
     });
 
     this.addSettingTab(new BookFormatSettingTab(this.app, this));
@@ -2850,7 +2777,7 @@ class BookFormatSyncPlugin extends Plugin {
       this.addBookFileMenu(menu, file);
     }));
     this.registerEvent(this.app.workspace.on('file-open', () => this.updateStatusBar()));
-    this.app.workspace.onLayoutReady(() => this.updateStatusBar());
+    this.app.workspace.onLayoutReady(() => { this.updateStatusBar(); void this.refreshShelfBase(); });
   }
 
   addBookFileMenu(menu, file) {
@@ -2892,7 +2819,25 @@ class BookFormatSyncPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = migrateSettings(Object.assign({}, DEFAULT_SETTINGS, await this.loadData()));
+    let data = await this.loadData();
+    // 旧插件（book-format-sync）改名前的设置迁移，只读旧 data.json，不做任何写入。
+    if (!data) {
+      const legacy = '.obsidian/plugins/book-format-sync/data.json';
+      try {
+        if (await this.exists(legacy)) data = JSON.parse(await this.adapter.read(legacy));
+      } catch (error) {
+        // 迁移失败不阻断加载，走默认设置
+      }
+    }
+    this.settings = migrateSettings(Object.assign({}, DEFAULT_SETTINGS, data || {}));
+    // notesRoot 是旧字段：迁移成卡片目录/笔记目录
+    if (this.settings.notesRoot && !(data && data.cardDir)) {
+      const root = String(this.settings.notesRoot).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || '20 笔记';
+      this.settings.cardDir = `${root}/书目`;
+      this.settings.readingNoteDir = `${root}/读书笔记`;
+      this.settings.shelfBasePath = `${root}/书架.base`;
+    }
+    delete this.settings.notesRoot;
   }
 
   async saveSettings() {
@@ -3703,16 +3648,25 @@ class BookFormatSyncPlugin extends Plugin {
     new LibraryModal(this.app, this).open();
   }
 
-  get notesRoot() {
-    return normalizeVaultRelativePath(this.settings.notesRoot || DEFAULT_NOTES_ROOT, '笔记目录');
+  get cardDir() {
+    return normalizeVaultRelativePath(this.settings.cardDir || DEFAULT_CARD_DIR, '书籍卡片目录');
   }
 
-  promptBookName(titleText, onSubmit) {
-    new BookNameModal(this.app, titleText, (value) => { void onSubmit(value); }).open();
+  get readingNoteDir() {
+    return normalizeVaultRelativePath(this.settings.readingNoteDir || DEFAULT_READING_DIR, '读书笔记目录');
+  }
+
+  get shelfBasePath() {
+    const configured = this.settings.shelfBasePath || DEFAULT_SHELF_BASE;
+    return normalizeVaultRelativePath(normalizeShelfBase(configured, DEFAULT_SHELF_BASE), '书架 Base 路径');
+  }
+
+  promptBookName(onSubmit) {
+    new BookNameModal(this.app, (payload) => { void onSubmit(payload); }).open();
   }
 
   /** 新建书籍卡：已存在则不覆盖，直接打开。 */
-  async createBookCard(bookName) {
+  async createBookCard(bookName, cover) {
     const name = String(bookName || '').trim();
     if (!name) {
       new Notice('书籍名不能为空。');
@@ -3720,7 +3674,7 @@ class BookFormatSyncPlugin extends Plugin {
     }
     let rel;
     try {
-      rel = bookCardPath(this.notesRoot, name);
+      rel = bookCardPath(this.cardDir, name);
     } catch (error) {
       new Notice(error.message, 8000);
       return false;
@@ -3730,11 +3684,12 @@ class BookFormatSyncPlugin extends Plugin {
       await this.app.workspace.openLinkText(rel, '', false);
       return false;
     }
-    const content = bookCardTemplate({ name, bookRoot: this.rootPath, date: todayStamp() });
+    const content = bookCardTemplate({ name, cover, bookRoot: this.rootPath, date: todayStamp() });
     await this.ensureFolder(posixDirname(rel));
     await this.adapter.write(rel, content);
     new Notice(`已创建书籍卡：${rel}`, 6000);
     await this.app.workspace.openLinkText(rel, '', false);
+    await this.refreshShelfBase();
     return true;
   }
 
@@ -3747,7 +3702,7 @@ class BookFormatSyncPlugin extends Plugin {
     }
     let rel;
     try {
-      rel = readingNotePath(this.notesRoot, name);
+      rel = readingNotePath(this.readingNoteDir, name);
     } catch (error) {
       new Notice(error.message, 8000);
       return false;
@@ -3765,30 +3720,36 @@ class BookFormatSyncPlugin extends Plugin {
     return true;
   }
 
-  /** 生成书架看板（Bases .base + 落地页 .md）：任一侧已存在时先确认覆盖。 */
-  async createShelfBoard() {
-    let basePath;
-    let notePath;
+  /**
+   * 生成/更新书架 Base（.base）。
+   * 数据源是设置里的书籍卡片目录，所以卡片目录一变，Base 内容跟着变。
+   * manual=false 时受 autoShelf 开关控制，失败不提示。
+   */
+  async refreshShelfBase(manual) {
+    let target;
     try {
-      basePath = shelfBoardPath(this.notesRoot);
-      notePath = shelfNotePath(this.notesRoot);
+      target = this.shelfBasePath;
     } catch (error) {
-      new Notice(error.message, 8000);
+      if (manual) new Notice(error.message, 8000);
       return false;
     }
-    const existing = [];
-    if (await this.exists(basePath)) existing.push(basePath);
-    if (await this.exists(notePath)) existing.push(notePath);
-    if (existing.length) {
-      const lines = ['将覆盖：', ...existing, '原有内容会被替换，确定继续？'];
-      const ok = await this.askConfirm('书架看板已存在', lines);
-      if (!ok) return false;
+    if (!manual && this.settings.autoShelf === false) return false;
+    const content = shelfBoardTemplate({ cardDir: this.cardDir });
+    let existing = null;
+    if (await this.exists(target)) {
+      try {
+        existing = await this.adapter.read(target);
+      } catch (error) {
+        existing = null;
+      }
     }
-    await this.ensureFolder(posixDirname(basePath));
-    await this.adapter.write(basePath, shelfBoardTemplate({ notesRoot: this.notesRoot }));
-    await this.adapter.write(notePath, shelfNoteTemplate({ notesRoot: this.notesRoot, date: todayStamp() }));
-    new Notice(`已生成书架看板：${basePath}`, 6000);
-    await this.app.workspace.openLinkText(notePath, '', false);
+    if (existing === content) return false;
+    await this.ensureFolder(posixDirname(target));
+    await this.adapter.write(target, content);
+    if (manual) {
+      new Notice(`已更新书架 Base：${target}`, 6000);
+      await this.app.workspace.openLinkText(target, '', false);
+    }
     return true;
   }
 
@@ -4075,47 +4036,59 @@ class BatchReportModal extends Modal {
 }
 
 class BookNameModal extends Modal {
-  constructor(app, titleText, onSubmit) {
+  constructor(app, onSubmit) {
     super(app);
-    this.titleText = titleText || '输入书名';
     this.onSubmit = typeof onSubmit === 'function' ? onSubmit : () => {};
-    this.value = '';
+    this.name = '';
+    this.cover = '';
     this.submitted = false;
   }
 
   onOpen() {
-    this.titleEl.setText(this.titleText);
+    this.titleEl.setText('新建书籍卡');
     this.contentEl.createEl('p', {
-      text: '书名应与书库中的书籍目录名一致；卡片与笔记会生成到「笔记目录」下。',
+      text: '书名应与书库中的书籍目录名一致；封面可填 vault 内图片路径或 http 图片地址，留空也行。',
       cls: 'bfs-muted',
     });
-    const input = this.contentEl.createEl('input', { type: 'text', cls: 'bfs-name-input' });
-    input.placeholder = '例如：道德经-老子';
-    input.addEventListener('input', () => { this.value = input.value; });
-    input.addEventListener('keydown', (event) => {
+
+    this.contentEl.createEl('label', { text: '书名', cls: 'bfs-field-label' });
+    const nameInput = this.contentEl.createEl('input', { type: 'text', cls: 'bfs-name-input' });
+    nameInput.placeholder = '例如：道德经-老子';
+    nameInput.addEventListener('input', () => { this.name = nameInput.value; });
+
+    this.contentEl.createEl('label', { text: '封面（可选）', cls: 'bfs-field-label' });
+    const coverInput = this.contentEl.createEl('input', { type: 'text', cls: 'bfs-name-input' });
+    coverInput.placeholder = '90 附件/某书/cover.jpg 或 https://…';
+    coverInput.addEventListener('input', () => { this.cover = coverInput.value; });
+
+    const onKey = (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         this.submit();
       }
-    });
+    };
+    nameInput.addEventListener('keydown', onKey);
+    coverInput.addEventListener('keydown', onKey);
+
     const actions = this.contentEl.createDiv({ cls: 'bfs-actions' });
     const ok = actions.createEl('button', { text: '创建', cls: 'mod-cta' });
     ok.addEventListener('click', () => this.submit());
     const cancel = actions.createEl('button', { text: '取消' });
     cancel.addEventListener('click', () => this.close());
-    window.setTimeout(() => input.focus(), 0);
+    window.setTimeout(() => nameInput.focus(), 0);
   }
 
   submit() {
     if (this.submitted) return;
     this.submitted = true;
-    const value = String(this.value || '').trim();
+    const name = String(this.name || '').trim();
+    const cover = String(this.cover || '').trim();
     this.close();
-    if (!value) {
+    if (!name) {
       new Notice('书籍名不能为空。');
       return;
     }
-    this.onSubmit(value);
+    this.onSubmit({ name, cover });
   }
 
   onClose() {
@@ -4162,16 +4135,16 @@ class LibraryModal extends Modal {
     const toolbar = this.contentEl.createDiv({ cls: 'bfs-actions bfs-toolbar' });
     const newCard = toolbar.createEl('button', { text: '新建书籍卡' });
     newCard.addEventListener('click', () => {
-      this.plugin.promptBookName('新建书籍卡', async (name) => {
-        await this.plugin.createBookCard(name);
+      this.plugin.promptBookName(async (payload) => {
+        await this.plugin.createBookCard(payload.name, payload.cover);
         this.render();
       });
     });
-    const shelf = toolbar.createEl('button', { text: '生成书架看板' });
+    const shelf = toolbar.createEl('button', { text: '刷新书架 Base' });
     shelf.addEventListener('click', async () => {
       shelf.disabled = true;
       try {
-        await this.plugin.createShelfBoard();
+        await this.plugin.refreshShelfBase(true);
       } finally {
         shelf.disabled = false;
       }
@@ -4185,7 +4158,7 @@ class LibraryModal extends Modal {
     const cardPaths = new Map();
     const hasCard = new Map();
     for (const group of this.groups) {
-      cardPaths.set(group.name, bookCardPath(this.plugin.notesRoot, group.name));
+      cardPaths.set(group.name, bookCardPath(this.plugin.cardDir, group.name));
       hasCard.set(group.name, await this.plugin.exists(cardPaths.get(group.name)));
     }
 
@@ -4287,14 +4260,49 @@ class BookFormatSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('笔记目录')
-      .setDesc('书籍卡、读书笔记、书架看板的存放目录，相对 vault 根目录。')
+      .setName('书籍卡片目录')
+      .setDesc('一本书一个 .md 卡片，相对 vault 根目录。书架 Base 的数据源就是这里。')
       .addText((text) => text
-        .setPlaceholder('20 笔记')
-        .setValue(this.plugin.settings.notesRoot || DEFAULT_NOTES_ROOT)
+        .setPlaceholder('20 笔记/书目')
+        .setValue(this.plugin.settings.cardDir || DEFAULT_CARD_DIR)
         .onChange(async (value) => {
-          this.plugin.settings.notesRoot = value.trim() || DEFAULT_NOTES_ROOT;
+          this.plugin.settings.cardDir = value.trim() || DEFAULT_CARD_DIR;
           await this.plugin.saveSettings();
+          await this.plugin.refreshShelfBase();
+        }));
+
+    new Setting(containerEl)
+      .setName('读书笔记目录')
+      .setDesc('「新建读书笔记」的写入位置，相对 vault 根目录。')
+      .addText((text) => text
+        .setPlaceholder('20 笔记/读书笔记')
+        .setValue(this.plugin.settings.readingNoteDir || DEFAULT_READING_DIR)
+        .onChange(async (value) => {
+          this.plugin.settings.readingNoteDir = value.trim() || DEFAULT_READING_DIR;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('书架 Base 路径')
+      .setDesc('Base 文件的写入位置，必须以 .base 结尾。')
+      .addText((text) => text
+        .setPlaceholder('20 笔记/书架.base')
+        .setValue(this.plugin.settings.shelfBasePath || DEFAULT_SHELF_BASE)
+        .onChange(async (value) => {
+          this.plugin.settings.shelfBasePath = value.trim() || DEFAULT_SHELF_BASE;
+          await this.plugin.saveSettings();
+          await this.plugin.refreshShelfBase();
+        }));
+
+    new Setting(containerEl)
+      .setName('自动维护书架 Base')
+      .setDesc('开启后：插件加载、新建书籍卡、修改卡片目录时自动重写 Base，无需手动命令。')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.autoShelf !== false)
+        .onChange(async (value) => {
+          this.plugin.settings.autoShelf = Boolean(value);
+          await this.plugin.saveSettings();
+          if (value) await this.plugin.refreshShelfBase();
         }));
 
     new Setting(containerEl)

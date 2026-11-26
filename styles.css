@@ -228,3 +228,10 @@
   box-sizing: border-box;
   margin: 6px 0 2px;
 }
+
+.bfs-field-label {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}

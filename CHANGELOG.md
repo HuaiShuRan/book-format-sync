@@ -17,6 +17,14 @@ and this project uses [Semantic Versioning](https://semver.org/).
 - 新增 `tests/library-harness.js`（18 项）：模板内容、标签合法性、路径计算与 YAML 转义。
 - 新增 `docs/LIBRARY-PLAN.md`：图书馆化分期计划（v1.4 骨架 / v1.5 阅读 / v1.6 元数据）与范围界定。
 
+### Changed
+
+- 插件更名为「书库」，manifest id 改为 `book-library`。安装目录需同步改为 `.obsidian/plugins/book-library/`；首次加载会自动从旧目录 `book-format-sync/data.json` 读取设置完成迁移。
+- 设置项重做：`书籍卡片目录`、`读书笔记目录`、`书架 Base 路径`、`自动维护书架 Base`。旧的 `笔记目录` 会自动换算成上述三个路径。
+- 书架 Base 改为按设置自动维护：插件加载、新建书籍卡、修改卡片目录时自动重写；原命令「生成书架看板」替换为「刷新书架 Base」，并且不再生成 `.md` 落地页。
+- 新建书籍卡弹窗新增「封面」输入：支持 vault 内图片路径（写成 `[[...]]`）与 `http(s)` 图片地址。
+- **CSS 数据标识保持不变**：frontmatter 仍写 `cssclasses: book-format-sync`，避免已生成的书籍失去 2em 缩进样式。
+
 ### Notes
 
 - 明确不做：内置书籍下载、AI 生成内容、PDF → 文本转换、移动端支持。
@@ -27,7 +35,7 @@ and this project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Plugin styles hide only the `cssclasses` property row in notes carrying `book-format-sync`; the YAML field and all other properties remain unchanged. Reading/live-preview indentation is unaffected.
+- Plugin styles hide only the `cssclasses` property row in notes carrying `book-library`; the YAML field and all other properties remain unchanged. Reading/live-preview indentation is unaffected.
 
 ## [1.3.8] - 2026-11-22
 

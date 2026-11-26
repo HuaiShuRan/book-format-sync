@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repository is an Obsidian plugin named `book-format-sync`.
+This repository is an Obsidian plugin named `book-library`.
 
 **Read `PROJECT_STATE.md` first.** It contains the current version, confirmed
 behavior, architecture, settings schema, test/lint commands, release process,

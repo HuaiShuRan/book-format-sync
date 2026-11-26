@@ -1,4 +1,4 @@
-# book-format-sync — 项目状态与交接摘要
+# book-library — 项目状态与交接摘要
 
 > 最后整理：2026-11-23  
 > 当前版本：`1.4.0`  
@@ -11,7 +11,7 @@
 
 ## 1. 项目定位
 
-`book-format-sync` 是一个 Obsidian 桌面插件，维护每本书的三种格式：
+`book-library` 是一个 Obsidian 桌面插件，维护每本书的三种格式：
 
 ```text
 md + txt + epub
@@ -202,7 +202,7 @@ node tools/build.js
 文件列表右键：
 
 ```text
-书库三格式同步
+书库
 ├─ 生成章节标题建议
 ├─ 规范化并生成三格式
 ├─ 只规范化
@@ -286,7 +286,7 @@ v1.4.0（本地已就绪，待打 tag 发布）
 目标目录：
 
 ```text
-<vault>/.obsidian/plugins/book-format-sync/
+<vault>/.obsidian/plugins/book-library/
 ```
 
 必须至少包含：

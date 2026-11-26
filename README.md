@@ -1,4 +1,4 @@
-# book-format-sync
+# book-library
 
 Obsidian plugin for maintaining a book library where every book has three formats:
 
@@ -23,7 +23,7 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
   - EPUB: `text-indent: 2em`
 - **Three-format conversion**: from `md`, `txt`, or `epub`, generate the other formats without modifying the source file.
 - **Local chapter title suggestions**: detect empty, numeric, placeholder, duplicated titles; generate suggestions from the first sentence/paragraph locally. No AI, no network, no API key.
-- **Clean properties UI**: in notes carrying `book-format-sync`, the plugin hides only the `cssclasses` property row; the YAML field and other properties remain intact.
+- **Clean properties UI**: in notes carrying `book-library`, the plugin hides only the `cssclasses` property row; the YAML field and other properties remain intact.
 - **Right-click menu** on `.md`, `.txt`, `.epub` in the file explorer.
 - **Safe writes**: validate and re-parse all three outputs before writing; back up existing targets under `.book-format-sync/backups/`.
 - **Title suggestion cache** under `.book-format-sync/titles/`; manually edited titles are not overwritten.
@@ -41,7 +41,7 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
 1. Create:
 
    ```text
-   <YourVault>/.obsidian/plugins/book-format-sync/
+   <YourVault>/.obsidian/plugins/book-library/
    ```
 
 2. Put these files in that folder:
@@ -53,29 +53,29 @@ The plugin normalizes chapter headings, enforces a consistent 2em first-line ind
    ```
 
 3. Restart Obsidian or reload the plugin.
-4. Enable **书库三格式同步** in **Settings → Community plugins**.
+4. Enable **书库** in **Settings → Community plugins**.
 
 ### From a GitHub Release
 
-Download the release assets and place `manifest.json`, `main.js`, and `styles.css` in `.obsidian/plugins/book-format-sync/`.
+Download the release assets and place `manifest.json`, `main.js`, and `styles.css` in `.obsidian/plugins/book-library/`.
 
 ## Usage
 
 ### Commands
 
-- `书库三格式同步：扫描书库（只读）`
-- `书库三格式同步：生成章节标题建议（本地）`
-- `书库三格式同步：规范化并生成当前书籍三格式`
-- `书库三格式同步：只规范化当前文件`
-- `书库三格式同步：从当前文件转换生成另外两种格式`
-- `书库三格式同步：规范化书库全部书籍`
+- `书库：扫描书库（只读）`
+- `书库：生成章节标题建议（本地）`
+- `书库：规范化并生成当前书籍三格式`
+- `书库：只规范化当前文件`
+- `书库：从当前文件转换生成另外两种格式`
+- `书库：规范化书库全部书籍`
 
 ### File explorer right-click menu
 
 Right-click a `.md`, `.txt`, or `.epub` file:
 
 ```text
-书库三格式同步
+书库
 ├─ 生成章节标题建议
 ├─ 规范化并生成三格式
 ├─ 只规范化
@@ -156,7 +156,7 @@ node tests/menu-harness.js
 ## Project structure
 
 ```text
-book-format-sync/
+book-library/
 ├─ manifest.json
 ├─ main.js                 # bundled Obsidian entry
 ├─ styles.css
