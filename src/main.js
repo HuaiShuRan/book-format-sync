@@ -1172,8 +1172,10 @@ class BookFormatSyncPlugin extends Plugin {
       // 非书籍文件不占用状态栏
       this.statusBar.setText('');
       this.statusBar.title = '';
+      this.statusBar.toggleClass('bfs-status-hidden', true);
       return;
     }
+    this.statusBar.toggleClass('bfs-status-hidden', false);
     const group = await this.groupForFile(file.path).catch(() => null);
     if (!group) {
       this.statusBar.setText('三格式 0/3');
@@ -1254,12 +1256,7 @@ class BookFormatSyncPlugin extends Plugin {
       return false;
     }
 
-    const plan = scaffoldPlan({
-      bookRoot: this.settings.bookRoot,
-      cardDir: this.settings.cardDir,
-      readingNoteDir: this.settings.readingNoteDir,
-      shelfBasePath: this.settings.shelfBasePath,
-    });
+    const plan = scaffoldPlan();
     const empty = this.vaultIsEmpty();
 
     if (!empty) {
@@ -1276,10 +1273,12 @@ class BookFormatSyncPlugin extends Plugin {
       ]);
       if (!ok) return false;
       await this.adapter.write(target, recommendationMarkdown({
-        bookRoot: this.settings.bookRoot,
-        cardDir: this.settings.cardDir,
-        readingNoteDir: this.settings.readingNoteDir,
-        shelfBasePath: this.settings.shelfBasePath,
+        current: {
+          bookRoot: this.settings.bookRoot,
+          cardDir: this.settings.cardDir,
+          readingNoteDir: this.settings.readingNoteDir,
+          shelfBasePath: this.settings.shelfBasePath,
+        },
         date: todayStamp(),
       }));
       new Notice(`已生成结构建议：${target}（未改动任何其它内容）`, 6000);
@@ -1288,28 +1287,52 @@ class BookFormatSyncPlugin extends Plugin {
     }
 
     const preview = plan.dirs.map((dir) => `· ${dir.path}`).join('\n');
+    const settingsPreview = [
+      `书库目录 → ${plan.settings.bookRoot}`,
+      `书籍卡片目录 → ${plan.settings.cardDir}`,
+      `读书笔记目录 → ${plan.settings.readingNoteDir}`,
+      `书架 Base 文件 → ${plan.settings.shelfBasePath}`,
+    ].join('\n');
     const ok = await this.askConfirm('布置书库目录结构', [
       '将创建以下目录（已存在的会跳过）：',
       preview,
+      '并把这些设置更新为推荐值：',
+      settingsPreview,
       '每个目录会放一份「_目录说明.md」，已存在的文件不会被覆盖。',
       '确定继续吗？',
     ]);
     if (!ok) return false;
 
     let created = 0;
-    for (const dir of plan.dirs) {
-      if (!(await this.exists(dir.path))) {
-        await this.ensureFolder(dir.path);
-        created += 1;
+    const previousBase = this.settings.shelfBasePath;
+    try {
+      for (const dir of plan.dirs) {
+        if (!(await this.exists(dir.path))) {
+          await this.ensureFolder(dir.path);
+          created += 1;
+        }
+        const notePath = posixJoin(dir.path, DIR_NOTE_FILE);
+        if (!(await this.exists(notePath))) {
+          await this.adapter.write(notePath, dirNoteContent(dir.path, dir.desc));
+        }
       }
-      const notePath = posixJoin(dir.path, DIR_NOTE_FILE);
-      if (!(await this.exists(notePath))) {
-        await this.adapter.write(notePath, dirNoteContent(dir.path, dir.desc));
-      }
+    } catch (error) {
+      new Notice(`布置中断：${error.message}（已创建的内容保留）`, 9000);
+      return false;
     }
 
+    this.settings.bookRoot = plan.settings.bookRoot;
+    this.settings.cardDir = plan.settings.cardDir;
+    this.settings.readingNoteDir = plan.settings.readingNoteDir;
+    this.settings.shelfBasePath = plan.settings.shelfBasePath;
+    await this.saveSettings();
+
     await this.refreshShelfBase(true);
-    new Notice(`已布置 ${created} 个目录，并更新书架 Base。`, 7000);
+    new Notice(`已布置 ${created} 个目录，设置已更新为推荐值，书架 Base 已重写。`, 8000);
+
+    if (previousBase && previousBase !== plan.settings.shelfBasePath && await this.exists(previousBase)) {
+      new Notice(`旧书架 Base 仍在：${previousBase}（可手动删除）`, 9000);
+    }
     return true;
   }
 
@@ -1897,8 +1920,13 @@ class LibraryModal extends Modal {
     const cardPaths = new Map();
     const hasCard = new Map();
     for (const group of this.groups) {
-      cardPaths.set(group.name, this.plugin.cardPathFor(group.name));
-      hasCard.set(group.name, await this.plugin.exists(cardPaths.get(group.name)));
+      try {
+        cardPaths.set(group.name, this.plugin.cardPathFor(group.name));
+      } catch (error) {
+        cardPaths.set(group.name, '');
+      }
+      const cardPath = cardPaths.get(group.name);
+      hasCard.set(group.name, Boolean(cardPath) && await this.plugin.exists(cardPath));
     }
 
     for (const group of this.groups) {

@@ -246,3 +246,7 @@
   flex: 1;
   margin: 0;
 }
+
+.bfs-status-hidden {
+  display: none;
+}

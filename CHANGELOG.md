@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project uses [Semantic Versioning](https://semver.org/).
 
+## [1.7.2] - 2026-11-27
+
+### Fixed
+
+- 「布置书库」用的是**固定推荐结构**（`10 书籍`、`20 笔记/书目`、`20 笔记/读书笔记`、`90 书架`、`90 附件`、`00 收件箱`），不再沿用当前设置里的旧路径；此前若把「书库目录」设成 `90 附件`，会生成一棵没有 `10 书籍` 的歪树。
+- 布置成功后会把这四个路径设置一并更新为推荐值，保证插件后续扫描、建卡、写 Base 都落在新结构里。
+- 布置完成后若旧书架 Base 仍存在，额外提示路径，避免误以为 DataView/Base 已迁移。
+- 布置过程中单步失败会明确提示并保留已创建内容，不再中途静默中断。
+- 书库面板渲染时若某本书的卡片路径非法，改为跳过该书并继续渲染，不再打断整个面板。
+
 ## [1.7.1] - 2026-11-27
 
 ### Changed

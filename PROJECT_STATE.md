@@ -1,9 +1,9 @@
 # book-library — 项目状态与交接摘要
 
-> 最后整理：2026-11-26  
-> 当前版本：`1.4.1`  
+> 最后整理：2026-11-27  
+> 当前版本：`1.7.2`  
 > 仓库：<https://github.com/HuaiShuRan/book-format-sync>  
-> 最新 Release：<https://github.com/HuaiShuRan/book-format-sync/releases/tag/v1.3.9>（`v1.4.x` 尚未发布）
+> 最新 Release：<https://github.com/HuaiShuRan/book-format-sync/releases/tag/v1.3.9>（`v1.4.x`–`v1.7.x` 尚未发布）
 
 这份文件用于换电脑、重新 clone 或交给另一个 AI 时快速接手。先读本文件，再读 `README.md` 和 `AGENTS.md`。
 

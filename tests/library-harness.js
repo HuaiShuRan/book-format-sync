@@ -337,17 +337,22 @@ test('默认配置生成推荐的六类目录', () => {
   assert.strictEqual(plan.basePath, '90 书架/书架.base');
 });
 
-test('目录清单跟随设置并去重', () => {
-  const plan = scaffoldPlan({
-    bookRoot: '10 书籍',
-    cardDir: '10 书籍/卡片',
-    readingNoteDir: '10 书籍/卡片',
-    shelfBasePath: '90 书架/书架',
-  });
+test('目录清单固定为推荐结构，不受当前设置影响', () => {
+  const plan = scaffoldPlan({ bookRoot: '90 附件', shelfBasePath: '20 笔记/书架.base' });
+  const paths = plan.dirs.map((dir) => dir.path);
+  assert.ok(paths.includes('10 书籍'), '必须包含 10 书籍');
+  assert.ok(paths.includes('90 书架'), '必须包含 90 书架');
+  assert.strictEqual(plan.settings.bookRoot, '10 书籍');
+  assert.strictEqual(plan.settings.cardDir, '20 笔记/书目');
+  assert.strictEqual(plan.settings.readingNoteDir, '20 笔记/读书笔记');
+  assert.strictEqual(plan.settings.shelfBasePath, '90 书架/书架.base');
+});
+
+test('目录清单无重复', () => {
+  const plan = scaffoldPlan();
   const paths = plan.dirs.map((dir) => dir.path);
   assert.strictEqual(new Set(paths).size, paths.length, '不应出现重复目录');
-  assert.ok(paths.includes('10 书籍/卡片'));
-  assert.ok(paths.includes('90 书架'));
+  assert.strictEqual(paths.length, 6);
 });
 
 test('每个目录都有说明文案', () => {
@@ -364,11 +369,21 @@ test('目录说明文件可生成且标注可删', () => {
   assert.ok(text.includes('可以删除'));
 });
 
-test('已有内容时的建议文档包含结构与三种走法', () => {
-  const text = recommendationMarkdown({ date: '2026-11-27' });
+test('已有内容时的建议文档包含结构、设置对照与三种走法', () => {
+  const text = recommendationMarkdown({
+    current: {
+      bookRoot: '90 附件',
+      cardDir: '20 笔记/书目',
+      readingNoteDir: '20 笔记/读书笔记',
+      shelfBasePath: '20 笔记/书架.base',
+    },
+    date: '2026-11-27',
+  });
   assert.ok(text.startsWith('---\n'));
   assert.ok(text.includes('书库结构建议'));
   assert.ok(text.includes('没有改动任何文件'), '应说明未改动现有文件');
+  assert.ok(text.includes('`90 附件`'), '应显示当前值');
+  assert.ok(text.includes('`10 书籍`'), '应显示推荐值');
   assert.ok(text.includes('手动搬家'));
   assert.ok(text.includes('零移动'));
   assert.ok(text.includes('渐进'));
